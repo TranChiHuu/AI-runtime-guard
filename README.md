@@ -214,6 +214,9 @@ all work end to end and are tested against payloads captured from live sessions
 Not built yet: the local dashboard, `guard resume` / `guard deny` for paused
 sessions, and adapters for Codex, Gemini, Cursor, and MCP.
 
+[`docs/TODO.md`](docs/TODO.md) is the honest list — including three bugs where
+the product currently claims to do something it does not.
+
 The risk weights are a first honest guess. They will be wrong for your
 workflows before they are right — `guard replay` exists so you can change them
 and prove what the change did.
