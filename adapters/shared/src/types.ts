@@ -123,6 +123,15 @@ export enum ResolutionSource {
   Timeout = 2,
   Headless = 3,
   AdapterFailure = 4,
+  /**
+   * The question was handed to the host's own permission UI, so the answer
+   * never returns through this path.
+   *
+   * Distinct from Timeout on purpose: recording a delegated prompt as "nobody
+   * answered" would make an audit trail claim the developer ignored a question
+   * they were, in fact, asked and did answer — just somewhere we cannot see.
+   */
+  Delegated = 5,
 }
 
 export interface Option {

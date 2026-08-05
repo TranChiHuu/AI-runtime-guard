@@ -19,6 +19,7 @@ import {
   Action,
   ChannelHint,
   Phase,
+  ResolutionSource,
   RuntimeClient,
   resolve as resolveInteraction,
   type Channel,
@@ -26,7 +27,7 @@ import {
 } from '@airuntimeguard/adapter-shared';
 
 import { toSignal, type HookEvent } from './map.js';
-import { nativeChannel, ttyChannel } from './channels.js';
+import { ttyChannel } from './channels.js';
 
 /**
  * Claude Code's hook response. `deny` blocks the call with a reason the agent
@@ -94,9 +95,18 @@ async function main(): Promise<void> {
 }
 
 /**
- * Gets the human's answer over the best channel this platform offers, then
- * reports it back. Choosing the channel is platform-local knowledge — the
- * reason this lives in the adapter and not the Brain.
+ * Gets the human's answer, then reports it back. Choosing how is platform-local
+ * knowledge — the reason this lives in the adapter and not the Brain.
+ *
+ * On Claude Code the best channel is the host's own permission UI: returning
+ * `ask` makes the question look like the tool the developer already uses, and
+ * costs us no TUI. But that answer comes back to the *host*, not to this
+ * process, so there is nothing here to wait for. The prompt is recorded as
+ * delegated and this hook returns immediately.
+ *
+ * Recording it as a timeout instead — which is what a naive "native channel"
+ * does — would make the audit trail claim the developer ignored a question they
+ * were actually asked and actually answered.
  */
 async function obtainAnswer(client: RuntimeClient, decision: Decision): Promise<Action> {
   const interaction = decision.interaction!;
@@ -107,12 +117,31 @@ async function obtainAnswer(client: RuntimeClient, decision: Decision): Promise<
     return decision.action;
   }
 
-  const channels: Channel[] = [nativeChannel(), ttyChannel()];
+  // The host has a permission UI, so hand the question to it.
+  await client.resolve({
+    promptId: interaction.promptId,
+    optionId: '',
+    source: ResolutionSource.Delegated,
+    channel: 'native',
+  });
+  return decision.action;
+}
+
+/**
+ * The fallback path, for hosts with no permission UI of their own.
+ *
+ * Unused on Claude Code and kept deliberately: it is the shape every other
+ * adapter needs, and deleting it would mean rediscovering it per platform.
+ */
+export async function obtainAnswerViaTTY(
+  client: RuntimeClient,
+  decision: Decision,
+): Promise<Action> {
+  const channels: Channel[] = [ttyChannel()];
 
   const result = await resolveInteraction(decision, channels, async (resolution) => {
     await client.resolve(resolution);
   });
-
   return result.action;
 }
 

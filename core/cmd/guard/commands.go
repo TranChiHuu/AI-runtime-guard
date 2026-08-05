@@ -240,6 +240,8 @@ func sourceName(s domain.ResolutionSource) string {
 		return "no human reachable"
 	case domain.ResolutionAdapterFailure:
 		return "prompt channel failed"
+	case domain.ResolutionDelegated:
+		return "handed to the agent's own permission prompt"
 	default:
 		return "unresolved"
 	}

@@ -176,6 +176,10 @@ const (
 	ResolutionTimeout
 	ResolutionHeadless
 	ResolutionAdapterFailure
+	// ResolutionDelegated means the question went to the host's own permission
+	// UI, so the answer never returns through this path. It is not a timeout:
+	// a developer was asked and did answer, somewhere we cannot observe.
+	ResolutionDelegated
 )
 
 // Resolution is a human's answer, or the reason there wasn't one.

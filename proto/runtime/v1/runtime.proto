@@ -265,6 +265,9 @@ enum ResolutionSource {
   RESOLUTION_SOURCE_TIMEOUT = 2;           // nobody answered in time
   RESOLUTION_SOURCE_HEADLESS = 3;          // no human was reachable at all
   RESOLUTION_SOURCE_ADAPTER_FAILURE = 4;   // the prompt channel broke
+  // The question went to the host's own permission UI, so the answer never
+  // returns through this path. Deliberately distinct from TIMEOUT.
+  RESOLUTION_SOURCE_DELEGATED = 5;
 }
 
 message ResolveRequest {

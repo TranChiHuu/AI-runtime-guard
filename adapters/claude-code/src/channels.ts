@@ -8,42 +8,14 @@
 
 import { openSync, readSync, closeSync } from 'node:fs';
 
-import { ChannelHint, type Channel, type Decision, type Interaction } from '@airuntimeguard/adapter-shared';
-
-/**
- * Claude Code's own permission UI.
- *
- * Preferred channel by a wide margin: it looks like the tool the developer
- * already uses, it costs us no TUI of our own, and it cannot fight the agent's
- * rendering. The adapter returns `ask` and Claude Code prompts — so this
- * channel does not block here, it defers the question to the host and reports
- * the Brain's own default in the meantime.
- */
-export function nativeChannel(): Channel {
-  return {
-    name: 'native',
-
-    available(interaction: Interaction): boolean {
-      return interaction.channelHint === ChannelHint.Inline;
-    },
-
-    async prompt(_decision: Decision, interaction: Interaction): Promise<string | null> {
-      // Handing the question to Claude Code means the answer arrives as the
-      // host's own allow/deny, not as an option id we can return here. Report
-      // no answer so the Brain's headless default applies to this call, and let
-      // the host's prompt govern what actually happens.
-      const deny = interaction.options.find((o) => o.id === 'deny');
-      return deny && interaction.headlessDefault >= 4 ? deny.id : null;
-    },
-  };
-}
+import type { Channel, Decision, Interaction } from '@airuntimeguard/adapter-shared';
 
 /**
  * A direct prompt on the controlling terminal.
  *
- * Not the default: raw output fighting an agent's own TUI is worse than it
- * sounds. This exists for hosts that offer no native prompt but do have a
- * terminal.
+ * Used only where the host offers no permission UI of its own. Raw output
+ * fighting an agent's TUI is worse than it sounds, so this is the fallback, not
+ * the default — see `index.ts` for why the native path does not appear here.
  */
 export function ttyChannel(): Channel {
   return {

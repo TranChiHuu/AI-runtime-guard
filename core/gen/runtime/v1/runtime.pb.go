@@ -441,6 +441,9 @@ const (
 	ResolutionSource_RESOLUTION_SOURCE_TIMEOUT         ResolutionSource = 2 // nobody answered in time
 	ResolutionSource_RESOLUTION_SOURCE_HEADLESS        ResolutionSource = 3 // no human was reachable at all
 	ResolutionSource_RESOLUTION_SOURCE_ADAPTER_FAILURE ResolutionSource = 4 // the prompt channel broke
+	// The question went to the host's own permission UI, so the answer never
+	// returns through this path. Deliberately distinct from TIMEOUT.
+	ResolutionSource_RESOLUTION_SOURCE_DELEGATED ResolutionSource = 5
 )
 
 // Enum value maps for ResolutionSource.
@@ -451,6 +454,7 @@ var (
 		2: "RESOLUTION_SOURCE_TIMEOUT",
 		3: "RESOLUTION_SOURCE_HEADLESS",
 		4: "RESOLUTION_SOURCE_ADAPTER_FAILURE",
+		5: "RESOLUTION_SOURCE_DELEGATED",
 	}
 	ResolutionSource_value = map[string]int32{
 		"RESOLUTION_SOURCE_UNSPECIFIED":     0,
@@ -458,6 +462,7 @@ var (
 		"RESOLUTION_SOURCE_TIMEOUT":         2,
 		"RESOLUTION_SOURCE_HEADLESS":        3,
 		"RESOLUTION_SOURCE_ADAPTER_FAILURE": 4,
+		"RESOLUTION_SOURCE_DELEGATED":       5,
 	}
 )
 
@@ -2187,13 +2192,14 @@ const file_runtime_v1_runtime_proto_rawDesc = "" +
 	"\vChannelHint\x12\x1c\n" +
 	"\x18CHANNEL_HINT_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13CHANNEL_HINT_INLINE\x10\x01\x12\x1c\n" +
-	"\x18CHANNEL_HINT_OUT_OF_BAND\x10\x02*\xb8\x01\n" +
+	"\x18CHANNEL_HINT_OUT_OF_BAND\x10\x02*\xd9\x01\n" +
 	"\x10ResolutionSource\x12!\n" +
 	"\x1dRESOLUTION_SOURCE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17RESOLUTION_SOURCE_HUMAN\x10\x01\x12\x1d\n" +
 	"\x19RESOLUTION_SOURCE_TIMEOUT\x10\x02\x12\x1e\n" +
 	"\x1aRESOLUTION_SOURCE_HEADLESS\x10\x03\x12%\n" +
-	"!RESOLUTION_SOURCE_ADAPTER_FAILURE\x10\x042\x85\x03\n" +
+	"!RESOLUTION_SOURCE_ADAPTER_FAILURE\x10\x04\x12\x1f\n" +
+	"\x1bRESOLUTION_SOURCE_DELEGATED\x10\x052\x85\x03\n" +
 	"\aRuntime\x129\n" +
 	"\x06Decide\x12\x19.runtime.v1.DecideRequest\x1a\x14.runtime.v1.Decision\x127\n" +
 	"\aObserve\x12\x12.runtime.v1.Signal\x1a\x16.runtime.v1.ObserveAck(\x01\x12=\n" +

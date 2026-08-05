@@ -21,9 +21,14 @@ import {
 /**
  * The subset of Claude Code's hook payload this adapter reads.
  *
- * Field names are the host's, verbatim. `tool_result`, `file_content`, and
- * `error` are deliberately absent: reading them would put tool output — and
- * therefore secrets — one careless line away from the wire (Article IX).
+ * Field names are the host's, verbatim, and were confirmed against payloads
+ * captured from a live session — not from the reference alone, which differs
+ * from reality in two places (see `exit_reason` and `tool_response` below).
+ *
+ * `tool_response` is deliberately absent from this interface. A captured
+ * PostToolUse for `Read` carries the file's entire content inside it, and a
+ * `Bash` one carries full stdout. Never naming the field is the cheapest way to
+ * guarantee it cannot reach the wire (Article IX).
  */
 export interface HookEvent {
   session_id?: string;
@@ -46,7 +51,15 @@ export interface HookEvent {
   prompt?: string;
   prompt_id?: string;
 
-  /** SessionEnd */
+  /**
+   * SessionEnd.
+   *
+   * The published reference calls this `exit_reason`; a live session sends
+   * `reason`. Both are read, because being wrong here means capabilities never
+   * reset and every session on the machine stays permanently marked as one that
+   * once touched a secret.
+   */
+  reason?: string;
   exit_reason?: string;
   /** SessionStart */
   source?: string;
@@ -108,8 +121,20 @@ const LIFECYCLE_KINDS: Record<string, Kind> = {
   UserPromptSubmit: Kind.Prompt,
 };
 
-/** Hook events that describe something that already happened. */
-const POST_EVENTS = new Set(['PostToolUse', 'PostToolUseFailure']);
+/**
+ * Hook events that describe something that already happened.
+ *
+ * Session lifecycle belongs here: a session ending cannot be prevented, and
+ * marking it PRE made the Brain issue an ASK asking permission for something
+ * that had already occurred. UserPromptSubmit stays PRE because the host really
+ * can block a prompt before the model sees it.
+ */
+const POST_EVENTS = new Set([
+  'PostToolUse',
+  'PostToolUseFailure',
+  'SessionStart',
+  'SessionEnd',
+]);
 
 export interface MapOptions {
   cwd: string;
@@ -164,7 +189,7 @@ export function toSignal(event: HookEvent, opts: MapOptions): Signal | null {
         // The prompt text itself is never forwarded — only its size, which is
         // enough to notice an unusually large injected instruction.
         ...(event.prompt ? { prompt_length: event.prompt.length } : {}),
-        ...(event.exit_reason ? { exit_reason: event.exit_reason } : {}),
+        ...(exitReason(event) ? { exit_reason: exitReason(event) } : {}),
         ...(event.source ? { source: event.source } : {}),
       },
     };
@@ -233,6 +258,11 @@ export function toSignal(event: HookEvent, opts: MapOptions): Signal | null {
       ? { ...base.attributes, secret_shape: shape, secret_count: 1 }
       : base.attributes,
   };
+}
+
+/** Reads whichever spelling of the session-end reason the host sent. */
+function exitReason(event: HookEvent): string | undefined {
+  return event.reason ?? event.exit_reason;
 }
 
 /**
