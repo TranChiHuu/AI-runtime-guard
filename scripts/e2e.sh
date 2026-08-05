@@ -64,6 +64,17 @@ echo "$OUT" | grep -q "answered: Allow once" \
   || fail "Resolve round trip did not complete"
 pass "Resolve round trip completes"
 
+# An unattended session must never be asked: the prompt would time out, the
+# default would apply anyway, and the developer would have been interrupted by a
+# question that decided nothing.
+echo "$OUT" | sed -n '/Unattended session/,/^Same upload/p' | grep -q "ASK" \
+  && fail "unattended session was asked a question nobody could answer"
+pass "unattended session is decided, not asked"
+
+echo "$OUT" | grep -q "No human was available to ask" \
+  || fail "unattended decision does not say why it was not asked"
+pass "unattended decisions explain that nobody was asked"
+
 # --- durability -------------------------------------------------------------
 
 guard report | grep -q "why:" || fail "audit trail has no explanations"

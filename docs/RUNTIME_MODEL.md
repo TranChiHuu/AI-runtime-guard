@@ -88,7 +88,22 @@ Target
 workspace root is), because only the adapter can know it. It is descriptive, not
 a judgment — the adapter says *where* something is, never *whether it is safe*.
 
-### 2.3 Secrets
+### 2.3 Supervision
+
+```
+supervision   UNKNOWN | SUPERVISED | UNATTENDED
+```
+
+Whether a human is positioned to answer a question right now. `UNKNOWN` counts
+as supervised: assuming nobody is watching would silently disable prompting for
+every adapter that omits the field.
+
+An `UNATTENDED` session is still fully protected — it just cannot be asked. The
+Decision Engine collapses `ASK` to the headless default rather than issuing a
+prompt that would time out into the same answer (§7.3). `PAUSE` and `BLOCK` are
+unaffected; they take effect without an answer.
+
+### 2.4 Secrets
 
 Adapters MUST NOT transmit secret values. When a signal touches something
 secret-shaped, the adapter sets:

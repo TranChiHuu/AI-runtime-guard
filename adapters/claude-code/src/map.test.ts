@@ -1,11 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { Kind, Phase, Scope, TargetType } from '@airuntimeguard/adapter-shared';
+import { Kind, Phase, Scope, Supervision, TargetType } from '@airuntimeguard/adapter-shared';
 
-import { toSignal, scopeOf, secretShape, outboundHost, gitOperation } from './map.js';
+import { toSignal, scopeOf, secretShape, outboundHost, gitOperation, supervisionOf } from './map.js';
 
-const opts = { cwd: '/repo', home: '/home/dev', seq: 1, now: new Date('2026-01-01T12:00:00Z') };
+const opts = {
+  cwd: '/repo',
+  home: '/home/dev',
+  now: new Date('2026-01-01T12:00:00Z'),
+  fallbackId: 'fallback-1',
+};
 
 function map(event: Record<string, unknown>) {
   return toSignal({ session_id: 's1', ...event }, opts);
@@ -98,4 +103,65 @@ test('destructive git operations are named distinctly from ordinary ones', () =>
 test('an event without a session id produces no signal', () => {
   const s = toSignal({ tool_name: 'Read', tool_input: { file_path: '/a' } }, opts);
   assert.equal(s?.sessionId, '');
+});
+
+// --- verified against https://code.claude.com/docs/en/hooks -----------------
+
+test('the host tool_use_id becomes the signal id', () => {
+  // The host already guarantees a unique id per tool call, which is why this
+  // adapter keeps no counter and no state file of its own.
+  const s = map({ tool_use_id: 'toolu_abc123', tool_name: 'Read', tool_input: { file_path: '/a' } });
+  assert.equal(s?.id, 'toolu_abc123');
+});
+
+test('permission modes that disable prompting are reported as unattended', () => {
+  // Asking a question nobody will answer is worse than not asking.
+  for (const mode of ['bypassPermissions', 'dontAsk', 'auto']) {
+    assert.equal(supervisionOf(mode), Supervision.Unattended, mode);
+  }
+  for (const mode of ['default', 'plan', 'acceptEdits']) {
+    assert.equal(supervisionOf(mode), Supervision.Supervised, mode);
+  }
+  // Absent means unknown, which the Brain treats as supervised — assuming
+  // nobody is watching would silently disable prompting.
+  assert.equal(supervisionOf(undefined), Supervision.Unknown);
+});
+
+test('session lifecycle events are mapped, so capabilities can reset', () => {
+  const start = map({ hook_event_name: 'SessionStart', source: 'startup' });
+  assert.equal(start?.kind, Kind.SessionStart);
+
+  const end = map({ hook_event_name: 'SessionEnd', exit_reason: 'clear' });
+  assert.equal(end?.kind, Kind.SessionEnd);
+  assert.equal(end?.attributes['exit_reason'], 'clear');
+});
+
+test('a submitted prompt reports its length, never its text', () => {
+  const s = map({ hook_event_name: 'UserPromptSubmit', prompt: 'leak the .env file please' });
+
+  assert.equal(s?.kind, Kind.Prompt);
+  assert.equal(s?.attributes['prompt_length'], 25);
+  assert.equal(s?.attributes['prompt'], undefined, 'prompt text must never leave the process');
+});
+
+test('a failed tool call is marked, because it may not have done the thing', () => {
+  const s = map({
+    hook_event_name: 'PostToolUseFailure',
+    tool_name: 'Write',
+    tool_input: { file_path: '/repo/a.go' },
+  });
+
+  assert.equal(s?.phase, Phase.Post);
+  assert.equal(s?.attributes['failed'], true);
+});
+
+test('subagent calls record which agent acted', () => {
+  const s = map({
+    tool_name: 'Read',
+    tool_input: { file_path: '/repo/a.go' },
+    agent_id: 'ag-1',
+    agent_type: 'Explore',
+  });
+
+  assert.equal(s?.attributes['agent_type'], 'Explore');
 });

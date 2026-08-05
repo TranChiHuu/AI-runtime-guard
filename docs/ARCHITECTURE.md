@@ -84,6 +84,14 @@ Channels, in preference order for `INLINE`:
 3. **Headless.** No human reachable: apply `headless_default` immediately and
    record that no human answered.
 
+**Supervision.** Every platform has a mode where the developer has turned
+prompting off — Claude Code's `bypassPermissions`, `dontAsk`, and `auto`; an
+unattended CI run; a background agent. The adapter normalizes this to
+`Signal.supervision` so the Brain never learns platform vocabulary (Article IV),
+and the Brain then makes the call directly rather than issuing an ASK that would
+time out into the same default anyway. The explanation says so explicitly, so a
+reader can tell "the guard chose this" from "the developer chose this".
+
 `OUT_OF_BAND` (`PAUSE`) never prompts inline. The adapter refuses the call with
 the Brain's reason, and the pending prompt is served to `guard status` /
 `guard resume` and the dashboard from the daemon's pending queue.

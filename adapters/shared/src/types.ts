@@ -53,6 +53,19 @@ export enum Scope {
   External = 'external',
 }
 
+/**
+ * Whether a human is positioned to answer a question right now.
+ *
+ * Every platform has some notion of "the user turned off prompting". The
+ * concept is normalized so the Brain never learns platform vocabulary.
+ */
+export enum Supervision {
+  /** The adapter did not say. Treated as supervised. */
+  Unknown = 0,
+  Supervised = 1,
+  Unattended = 2,
+}
+
 export interface Target {
   type: TargetType;
   value: string;
@@ -74,6 +87,8 @@ export interface Signal {
   kind: Kind;
   actor: Actor;
   target: Target;
+  /** Whether a human could answer a prompt about this signal. */
+  supervision: Supervision;
   /**
    * Kind-specific. Secret values must never appear here; use
    * `secret_shape` / `secret_count` instead.

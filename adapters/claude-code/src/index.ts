@@ -52,8 +52,8 @@ async function main(): Promise<void> {
   const signal = toSignal(event, {
     cwd: event.cwd ?? process.cwd(),
     home: homedir(),
-    seq: nextSeq(event.session_id ?? ''),
     now: new Date(),
+    fallbackId: `${event.session_id ?? 'unknown'}-${Date.now()}`,
   });
 
   if (!signal || !signal.sessionId) {
@@ -88,7 +88,7 @@ async function main(): Promise<void> {
     ? await obtainAnswer(client, decision)
     : decision.action;
 
-  emit(translate(action, decision));
+  emit(translate(action, decision, event.hook_event_name ?? 'PreToolUse'));
   client.close();
   process.exit(0);
 }
@@ -117,7 +117,7 @@ async function obtainAnswer(client: RuntimeClient, decision: Decision): Promise<
 }
 
 /** Translates a verdict into Claude Code's idiom. Presentation only. */
-function translate(action: Action, decision: Decision): HookResponse {
+function translate(action: Action, decision: Decision, hookEventName: string): HookResponse {
   const e = decision.explanation;
 
   switch (action) {
@@ -130,7 +130,7 @@ function translate(action: Action, decision: Decision): HookResponse {
     case Action.Ask:
       return {
         hookSpecificOutput: {
-          hookEventName: 'PreToolUse',
+          hookEventName,
           permissionDecision: 'ask',
           permissionDecisionReason: `${e.why}\n\n${e.guidance}`,
         },
@@ -140,7 +140,7 @@ function translate(action: Action, decision: Decision): HookResponse {
     case Action.Block:
       return {
         hookSpecificOutput: {
-          hookEventName: 'PreToolUse',
+          hookEventName,
           permissionDecision: 'deny',
           permissionDecisionReason: `${e.why}\n\n${e.guidance}`,
         },
@@ -163,36 +163,6 @@ function readEvent(): HookEvent | null {
 function emit(response: HookResponse): void {
   if (Object.keys(response).length > 0) {
     process.stdout.write(JSON.stringify(response));
-  }
-}
-
-/**
- * Per-session sequence numbers.
- *
- * Each hook invocation is a fresh process, so the counter lives in a file
- * beside the runtime state. A gap tells the Brain that signals were lost, which
- * lowers confidence rather than silently understating a session.
- */
-function nextSeq(sessionId: string): number {
-  if (!sessionId) return 0;
-
-  const { readFileSync: read, writeFileSync: write, mkdirSync } = require('node:fs') as typeof import('node:fs');
-  const { join } = require('node:path') as typeof import('node:path');
-  const { runtimeDir } = require('@airuntimeguard/adapter-shared') as typeof import('@airuntimeguard/adapter-shared');
-
-  const dir = join(runtimeDir(), 'seq');
-  const file = join(dir, `${sessionId}.seq`);
-
-  try {
-    mkdirSync(dir, { recursive: true, mode: 0o700 });
-    const current = Number(read(file, 'utf8')) || 0;
-    const next = current + 1;
-    write(file, String(next), { mode: 0o600 });
-    return next;
-  } catch {
-    // Sequence numbers are diagnostics, not correctness. Seq 0 means "this
-    // adapter does not number its signals", which the Brain already handles.
-    return 0;
   }
 }
 

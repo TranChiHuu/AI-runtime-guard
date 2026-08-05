@@ -79,6 +79,18 @@ func (e *Engine) Decide(
 		action = domain.ActionAsk
 	}
 
+	// Nobody is watching. An ASK here would time out, the headless default
+	// would apply anyway, and the developer would have been interrupted by a
+	// question that decided nothing — so make the honest call directly and say
+	// in the explanation that this is what happened.
+	//
+	// PAUSE and BLOCK still stand: those do not need an answer to take effect.
+	unattended := !ctx.Supervised
+	if unattended && action == domain.ActionAsk {
+		action = e.cfg.HeadlessDefault(risk.Score >= e.cfg.Thresholds.Escalate)
+		action = action.Clamp(bounds.Floor, bounds.Ceiling)
+	}
+
 	d := domain.Decision{
 		ID:        e.newID(),
 		SessionID: sess.ID,
@@ -88,7 +100,7 @@ func (e *Engine) Decide(
 		Policies:  bounds.Applied,
 		DecidedAt: now,
 	}
-	d.Explanation = e.explain(sess, ctx, sig, risk, action, bounds, prefReason)
+	d.Explanation = e.explain(sess, ctx, sig, risk, action, bounds, prefReason, unattended)
 
 	if action.NeedsHuman() {
 		d.Interaction = e.interaction(action, risk, sig)
@@ -145,6 +157,7 @@ func (e *Engine) explain(
 	action domain.Action,
 	bounds policy.Bounds,
 	prefReason string,
+	unattended bool,
 ) domain.Explanation {
 	what := describeSignal(sig)
 
@@ -155,6 +168,11 @@ func (e *Engine) explain(
 	}
 	if prefReason != "" {
 		why += " " + prefReason
+	}
+	if unattended {
+		// Say it plainly. A developer reading this later must be able to tell
+		// "the guard chose this" from "the developer chose this".
+		why += " No human was available to ask (prompting is disabled for this session), so the configured default was applied."
 	}
 	if ctx.SignalsLost {
 		// The developer deserves to know the picture is partial rather than

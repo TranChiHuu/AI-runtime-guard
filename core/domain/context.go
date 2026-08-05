@@ -30,6 +30,11 @@ type Context struct {
 	// Destination is the host the current signal targets, if any. Carried so
 	// explanations can name it without re-parsing the signal.
 	Destination string
+	// Supervised is false when the developer has turned off prompting for this
+	// session. An unattended session can still be protected — it just cannot be
+	// asked.
+	Supervised bool
+
 	// SignalsLost marks a session with sequence gaps. Its risk is understated,
 	// so confidence must drop rather than the score silently being trusted.
 	SignalsLost bool

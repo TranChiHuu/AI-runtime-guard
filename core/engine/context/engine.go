@@ -38,6 +38,9 @@ func (e *Engine) Derive(sess *domain.Session, sig domain.Signal) domain.Context 
 		WorkspaceTrust: domain.TrustUnknown,
 		Sensitivity:    domain.SensitivityLow,
 		SignalsLost:    sess.Gaps() > 0,
+		// Unknown counts as supervised: assuming nobody is watching would
+		// silently disable prompting for every adapter that omits the field.
+		Supervised: !sig.Supervision.Unattended(),
 	}
 
 	if e.ws.Trusted {

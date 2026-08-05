@@ -134,7 +134,9 @@ function toWire(s: Signal): Record<string, unknown> {
     kind: s.kind,
     actor: { type: 1, name: s.actor.name },
     target: { type: s.target.type, value: s.target.value, scope: s.target.scope },
-    attributes: { fields: toStruct(s.attributes) },
+    // supervision rides in attributes so the proto stays open to new lifecycle
+    // facts without a schema bump; the server lifts it into a typed field.
+    attributes: { fields: toStruct({ ...s.attributes, supervision: s.supervision }) },
   };
 }
 

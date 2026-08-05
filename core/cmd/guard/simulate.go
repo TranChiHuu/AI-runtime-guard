@@ -62,6 +62,16 @@ func cmdSimulate() error {
 			},
 		},
 		{
+			// Nobody is watching, so an ASK would time out and the default would
+			// apply anyway. The Brain makes the call directly instead.
+			name:    "Unattended session: prompting is disabled",
+			session: "sim-unattended-" + stamp,
+			signals: []*pb.Signal{
+				unattended(read(1, "/repo/.env", "repo", "env-file")),
+				unattended(shell(2, "tar czf /tmp/dump.tgz /repo")),
+			},
+		},
+		{
 			name:    "Same upload, but the destination is allowlisted",
 			session: "sim-allowed-" + stamp,
 			signals: []*pb.Signal{
@@ -197,6 +207,16 @@ func network(seq uint64, host string) *pb.Signal {
 
 func ingest(seq uint64, url string) *pb.Signal {
 	return sig(seq, pb.Kind_KIND_CONTEXT_INGEST, pb.TargetType_TARGET_TYPE_RESOURCE, url, "external")
+}
+
+// unattended marks a signal as coming from a session where the developer has
+// turned prompting off.
+func unattended(s *pb.Signal) *pb.Signal {
+	if s.Attributes == nil {
+		s.Attributes, _ = structpb.NewStruct(map[string]any{})
+	}
+	s.Attributes.Fields["supervision"] = structpb.NewNumberValue(2)
+	return s
 }
 
 func gitOp(seq uint64, op, remote string) *pb.Signal {

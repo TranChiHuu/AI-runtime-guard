@@ -54,6 +54,9 @@ func toDomainSignal(p *pb.Signal) domain.Signal {
 		if v, ok := s.Attributes["secret_count"].(float64); ok {
 			s.SecretCount = int(v)
 		}
+		if v, ok := s.Attributes["supervision"].(float64); ok {
+			s.Supervision = domain.Supervision(v)
+		}
 	}
 
 	return s

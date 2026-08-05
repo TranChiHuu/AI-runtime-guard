@@ -123,6 +123,29 @@ const (
 	SecretCredentialStore SecretShape = "credential-store"
 )
 
+// Supervision is whether a human is positioned to answer a question right now.
+//
+// Every agent platform has some notion of "the user has turned off prompting"
+// — Claude Code's bypassPermissions, an unattended CI run, a background agent.
+// The concept is normalized here precisely so the Brain never has to know which
+// platform it came from (Article IV).
+//
+// It matters because asking a question nobody will answer is worse than not
+// asking: the prompt times out, the headless default applies anyway, and the
+// developer sees an interruption that decided nothing.
+type Supervision uint8
+
+const (
+	// SupervisionUnknown means the adapter did not say. Treated as supervised,
+	// because assuming nobody is watching would silently disable prompting.
+	SupervisionUnknown Supervision = iota
+	SupervisionSupervised
+	SupervisionUnattended
+)
+
+// Unattended reports whether prompting this session is pointless.
+func (s Supervision) Unattended() bool { return s == SupervisionUnattended }
+
 type Actor struct {
 	Type ActorType
 	// Name is a tool or server name. Opaque: engines must not branch on it.
@@ -153,6 +176,9 @@ type Signal struct {
 
 	SecretShape SecretShape
 	SecretCount int
+
+	// Supervision is whether a human could answer a prompt about this signal.
+	Supervision Supervision
 
 	// RawRef is an opaque adapter-local handle used for replay. Optional.
 	RawRef string
