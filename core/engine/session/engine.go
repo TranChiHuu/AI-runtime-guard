@@ -124,6 +124,14 @@ func latch(sess *domain.Session, sig domain.Signal) {
 	case domain.KindNetwork:
 		if sig.Target.Scope == domain.ScopeExternal {
 			caps.Latch(domain.CapOutboundNetwork, sig)
+
+			// Reaching a host and sending data to it are separate facts.
+			// Fetching a dependency is the most common benign outbound call
+			// there is; latching egress for it would make every session that
+			// runs a package manager look like an exfiltration attempt.
+			if sig.SendsData() {
+				caps.Latch(domain.CapDataEgress, sig)
+			}
 		}
 
 	case domain.KindGit:

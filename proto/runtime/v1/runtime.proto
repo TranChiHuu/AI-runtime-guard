@@ -145,6 +145,8 @@ message Capabilities {
   Capability git_write = 6;
   Capability untrusted_context = 7;
   Capability credential_material = 8;
+  // Data actually left the machine, as distinct from merely reaching a host.
+  Capability data_egress = 9;
 }
 
 message Session {

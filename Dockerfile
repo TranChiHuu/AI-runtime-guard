@@ -36,6 +36,10 @@ RUN pnpm install --frozen-lockfile
 
 COPY proto/ ./proto/
 COPY adapters/ ./adapters/
+# live.test.ts runs the mapper against payloads captured from a real session.
+# Without these fixtures the adapter is only ever tested against what the docs
+# claim, which is what let two contract bugs through in the first place.
+COPY testdata/ ./testdata/
 RUN pnpm -r build
 
 # --- TypeScript tests ------------------------------------------------------

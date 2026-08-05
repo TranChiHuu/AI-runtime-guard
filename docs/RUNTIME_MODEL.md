@@ -88,7 +88,26 @@ Target
 workspace root is), because only the adapter can know it. It is descriptive, not
 a judgment — the adapter says *where* something is, never *whether it is safe*.
 
-### 2.3 Supervision
+### 2.3 Transfer direction
+
+```
+transfer   UNKNOWN | INBOUND | EGRESS
+```
+
+Reaching a host and sending data to it are different facts, and conflating them
+is what makes a guard cry wolf. An agent that reads a config file and then runs
+`npm install` has the same capability set as one running an exfiltration chain —
+`secret_access` plus `outbound_network` — but nothing left the machine.
+
+`UNKNOWN` never latches `data_egress`. Guessing would reintroduce exactly the
+false positive the distinction exists to remove.
+
+Measured on a real Claude Code session: a payload-less fetch after reading a
+secrets file scored 63/100 and interrupted the developer before this split, and
+43/100 with no interruption after it. The same sequence carrying an actual body
+still reaches 100/100.
+
+### 2.4 Supervision
 
 ```
 supervision   UNKNOWN | SUPERVISED | UNATTENDED
@@ -103,7 +122,7 @@ Decision Engine collapses `ASK` to the headless default rather than issuing a
 prompt that would time out into the same answer (§7.3). `PAUSE` and `BLOCK` are
 unaffected; they take effect without an answer.
 
-### 2.4 Secrets
+### 2.5 Secrets
 
 Adapters MUST NOT transmit secret values. When a signal touches something
 secret-shaped, the adapter sets:
@@ -148,7 +167,8 @@ Capabilities
   filesystem_read      Capability   read outside declared workspace
   filesystem_write     Capability   any write
   shell_exec           Capability   any shell execution
-  outbound_network     Capability   any outbound connection
+  outbound_network     Capability   reached an external host
+  data_egress          Capability   data actually left the machine
   git_write            Capability   commit, push, remote mutation
   untrusted_context    Capability   ingested content from outside the workspace
   credential_material  Capability   private keys, tokens, keychain

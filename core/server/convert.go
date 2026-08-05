@@ -57,6 +57,9 @@ func toDomainSignal(p *pb.Signal) domain.Signal {
 		if v, ok := s.Attributes["supervision"].(float64); ok {
 			s.Supervision = domain.Supervision(v)
 		}
+		if v, ok := s.Attributes["transfer"].(float64); ok {
+			s.Transfer = domain.Transfer(v)
+		}
 	}
 
 	return s
@@ -150,6 +153,7 @@ func fromDomainSession(s *domain.Session) *pb.Session {
 		domain.CapGitWrite:           &caps.GitWrite,
 		domain.CapUntrustedContext:   &caps.UntrustedContext,
 		domain.CapCredentialMaterial: &caps.CredentialMaterial,
+		domain.CapDataEgress:         &caps.DataEgress,
 	}
 	for name, field := range set {
 		entry, ok := s.Capabilities[name]

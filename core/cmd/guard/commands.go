@@ -129,12 +129,18 @@ func cmdReport(sessionID string) error {
 	for _, r := range rows {
 		// Allowed decisions are recorded but not narrated: a report that
 		// repeats a rationale for every benign file read is a report nobody
-		// reads.
-		if r.Action == domain.ActionAllow {
+		// reads. A suppressed question is the exception — it landed on ALLOW
+		// without anyone agreeing to it, which is exactly what a reader is
+		// looking for.
+		if r.Action == domain.ActionAllow && !r.Suppressed {
 			continue
 		}
 
-		fmt.Printf("%s  [%s]  %s\n", r.DecidedAt.Format("15:04:05"), r.Action, r.SessionID)
+		label := r.Action.String()
+		if r.Suppressed {
+			label = r.Action.String() + ", auto-answered"
+		}
+		fmt.Printf("%s  [%s]  %s\n", r.DecidedAt.Format("15:04:05"), label, r.SessionID)
 		fmt.Printf("    what: %s\n", r.Explanation.What)
 		fmt.Printf("     why: %s\n", r.Explanation.Why)
 		if len(r.Explanation.Evidence) > 0 {
@@ -260,6 +266,7 @@ func capsOf(c *pb.Capabilities) string {
 		{"fs-write", c.GetFilesystemWrite()},
 		{"shell", c.GetShellExec()},
 		{"network", c.GetOutboundNetwork()},
+		{"egress", c.GetDataEgress()},
 		{"git", c.GetGitWrite()},
 		{"untrusted", c.GetUntrustedContext()},
 		{"credential", c.GetCredentialMaterial()},

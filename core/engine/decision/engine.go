@@ -85,22 +85,28 @@ func (e *Engine) Decide(
 	// in the explanation that this is what happened.
 	//
 	// PAUSE and BLOCK still stand: those do not need an answer to take effect.
-	unattended := !ctx.Supervised
-	if unattended && action == domain.ActionAsk {
+	// collapsedAsk records that a question was actually replaced, not merely
+	// that nobody was watching. Saying "the configured default was applied" on a
+	// decision that reached NOTIFY on its own merits would describe a fallback
+	// that never happened.
+	collapsedAsk := false
+	if !ctx.Supervised && action == domain.ActionAsk {
 		action = e.cfg.HeadlessDefault(risk.Score >= e.cfg.Thresholds.Escalate)
 		action = action.Clamp(bounds.Floor, bounds.Ceiling)
+		collapsedAsk = true
 	}
 
 	d := domain.Decision{
-		ID:        e.newID(),
-		SessionID: sess.ID,
-		SignalID:  sig.ID,
-		Action:    action,
-		Risk:      risk,
-		Policies:  bounds.Applied,
-		DecidedAt: now,
+		ID:         e.newID(),
+		SessionID:  sess.ID,
+		SignalID:   sig.ID,
+		Action:     action,
+		Risk:       risk,
+		Policies:   bounds.Applied,
+		Suppressed: collapsedAsk,
+		DecidedAt:  now,
 	}
-	d.Explanation = e.explain(sess, ctx, sig, risk, action, bounds, prefReason, unattended)
+	d.Explanation = e.explain(sess, ctx, sig, risk, action, bounds, prefReason, collapsedAsk)
 
 	if action.NeedsHuman() {
 		d.Interaction = e.interaction(action, risk, sig)
@@ -157,7 +163,7 @@ func (e *Engine) explain(
 	action domain.Action,
 	bounds policy.Bounds,
 	prefReason string,
-	unattended bool,
+	collapsedAsk bool,
 ) domain.Explanation {
 	what := describeSignal(sig)
 
@@ -169,10 +175,10 @@ func (e *Engine) explain(
 	if prefReason != "" {
 		why += " " + prefReason
 	}
-	if unattended {
+	if collapsedAsk {
 		// Say it plainly. A developer reading this later must be able to tell
 		// "the guard chose this" from "the developer chose this".
-		why += " No human was available to ask (prompting is disabled for this session), so the configured default was applied."
+		why += " This would have been a question, but prompting is disabled for this session, so the configured default was applied instead."
 	}
 	if ctx.SignalsLost {
 		// The developer deserves to know the picture is partial rather than

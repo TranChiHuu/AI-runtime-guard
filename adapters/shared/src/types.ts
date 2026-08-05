@@ -66,6 +66,19 @@ export enum Supervision {
   Unattended = 2,
 }
 
+/**
+ * Which way data moves in a network operation.
+ *
+ * Reaching a host and sending data to it are different facts; conflating them
+ * makes every dependency install look like an exfiltration attempt.
+ */
+export enum Transfer {
+  /** Could not tell. Never treated as egress. */
+  Unknown = 0,
+  Inbound = 1,
+  Egress = 2,
+}
+
 export interface Target {
   type: TargetType;
   value: string;
@@ -89,6 +102,8 @@ export interface Signal {
   target: Target;
   /** Whether a human could answer a prompt about this signal. */
   supervision: Supervision;
+  /** Data direction, for network operations. */
+  transfer?: Transfer;
   /**
    * Kind-specific. Secret values must never appear here; use
    * `secret_shape` / `secret_count` instead.

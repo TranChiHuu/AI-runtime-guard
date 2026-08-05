@@ -146,6 +146,25 @@ const (
 // Unattended reports whether prompting this session is pointless.
 func (s Supervision) Unattended() bool { return s == SupervisionUnattended }
 
+// Transfer is the direction data moves in a network operation.
+//
+// Reaching a host and sending data to it are different facts, and conflating
+// them is what makes a guard cry wolf: an agent that reads a config file and
+// then runs `npm install` has done nothing wrong, but it looks identical to
+// exfiltration if the only thing recorded is "touched the network".
+type Transfer uint8
+
+const (
+	// TransferUnknown means the adapter could not tell. It must not latch
+	// egress: over-reporting here reintroduces exactly the false positive this
+	// distinction exists to remove.
+	TransferUnknown Transfer = iota
+	// TransferInbound is a fetch — data came in.
+	TransferInbound
+	// TransferEgress is data leaving the machine.
+	TransferEgress
+)
+
 type Actor struct {
 	Type ActorType
 	// Name is a tool or server name. Opaque: engines must not branch on it.
@@ -180,6 +199,9 @@ type Signal struct {
 	// Supervision is whether a human could answer a prompt about this signal.
 	Supervision Supervision
 
+	// Transfer is the data direction, for network operations.
+	Transfer Transfer
+
 	// RawRef is an opaque adapter-local handle used for replay. Optional.
 	RawRef string
 }
@@ -199,3 +221,6 @@ func (s Signal) Attr(key string) string {
 
 // TouchesSecret reports whether this signal touched something secret-shaped.
 func (s Signal) TouchesSecret() bool { return s.SecretShape != SecretNone }
+
+// SendsData reports whether this signal moves data off the machine.
+func (s Signal) SendsData() bool { return s.Transfer == TransferEgress }

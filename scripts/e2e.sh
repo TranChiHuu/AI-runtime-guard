@@ -64,6 +64,19 @@ echo "$OUT" | grep -q "answered: Allow once" \
   || fail "Resolve round trip did not complete"
 pass "Resolve round trip completes"
 
+# Reading a config file then fetching a dependency has the same capabilities as
+# an exfil chain, but nothing was sent. If this escalates, the guard cries wolf
+# on the single most common benign sequence an agent produces.
+echo "$OUT" | sed -n '/Read a config file/,/^Unattended/p' | grep -qE "ASK|PAUSE|BLOCK" \
+  && fail "a plain fetch after reading a config file escalated"
+pass "fetching after reading secrets does not escalate"
+
+# The same shape WITH an actual send must still reach PAUSE, or the distinction
+# has been bought by going blind.
+echo "$OUT" | grep -q "sent data off the machine after reading key material" \
+  || fail "an actual egress was not scored as one"
+pass "an actual send is scored distinctly from reaching a host"
+
 # An unattended session must never be asked: the prompt would time out, the
 # default would apply anyway, and the developer would have been interrupted by a
 # question that decided nothing.
@@ -71,8 +84,12 @@ echo "$OUT" | sed -n '/Unattended session/,/^Same upload/p' | grep -q "ASK" \
   && fail "unattended session was asked a question nobody could answer"
 pass "unattended session is decided, not asked"
 
-echo "$OUT" | grep -q "No human was available to ask" \
-  || fail "unattended decision does not say why it was not asked"
+# A suppressed question often lands on ALLOW. If the report hides it, an
+# unattended run looks clean while questions were being auto-answered.
+guard report | grep -q "auto-answered" \
+  || fail "an auto-answered question is invisible in the report"
+guard report | grep -q "This would have been a question, but prompting is disabled" \
+  || fail "a collapsed question does not say it was collapsed"
 pass "unattended decisions explain that nobody was asked"
 
 # --- durability -------------------------------------------------------------

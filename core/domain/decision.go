@@ -143,8 +143,18 @@ type Decision struct {
 	Explanation Explanation
 	// Interaction is nil unless a human answer is needed.
 	Interaction *Interaction
-	DecidedAt   time.Time
-	Latency     time.Duration
+
+	// Suppressed marks a decision that would have been a question, had anyone
+	// been available to answer it.
+	//
+	// Such a decision often lands on ALLOW, which makes it indistinguishable
+	// from an unremarkable one unless it is flagged — and "questions that were
+	// silently answered yes" is the single most important thing to review after
+	// an unattended run.
+	Suppressed bool
+
+	DecidedAt time.Time
+	Latency   time.Duration
 }
 
 // Validate enforces the invariants that must hold before a decision is

@@ -62,7 +62,10 @@ CREATE TABLE IF NOT EXISTS decisions (
   factors     TEXT NOT NULL,
   policies    TEXT,
   prompt_id   TEXT,
-  resolution  TEXT
+  resolution  TEXT,
+  -- A question that was auto-answered because nobody could be asked. Often
+  -- lands on ALLOW, so without this column it is invisible in a report.
+  suppressed  INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS decisions_by_session ON decisions(session_id, decided_at);
 
@@ -146,11 +149,11 @@ func (s *Store) PutDecision(d domain.Decision) error {
 	_, err := s.db.Exec(`
 		INSERT OR REPLACE INTO decisions
 		(id, session_id, signal_id, action, score, confidence, config_version,
-		 decided_at, latency_us, explanation, factors, policies, prompt_id)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		 decided_at, latency_us, explanation, factors, policies, prompt_id, suppressed)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		d.ID, d.SessionID, d.SignalID, int(d.Action), d.Risk.Score, d.Risk.Confidence,
 		d.Risk.ConfigVersion, ts(d.DecidedAt), d.Latency.Microseconds(),
-		string(explanation), string(factors), string(policies), promptID)
+		string(explanation), string(factors), string(policies), promptID, d.Suppressed)
 	return err
 }
 
@@ -264,10 +267,12 @@ type DecisionRow struct {
 	DecidedAt   time.Time
 	Explanation domain.Explanation
 	Resolution  *domain.Resolution
+	Suppressed  bool
 }
 
 func (s *Store) Decisions(sessionID string) ([]DecisionRow, error) {
-	query := `SELECT id, session_id, signal_id, action, score, decided_at, explanation, resolution
+	query := `SELECT id, session_id, signal_id, action, score, decided_at, explanation,
+	                 resolution, suppressed
 	          FROM decisions`
 	args := []any{}
 	if sessionID != "" {
@@ -292,7 +297,7 @@ func (s *Store) Decisions(sessionID string) ([]DecisionRow, error) {
 			resolution  sql.NullString
 		)
 		if err := rows.Scan(&r.ID, &r.SessionID, &r.SignalID, &action, &r.Score, &decidedAt,
-			&explanation, &resolution); err != nil {
+			&explanation, &resolution, &r.Suppressed); err != nil {
 			return nil, err
 		}
 

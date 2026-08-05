@@ -41,6 +41,7 @@ const (
 	CapFilesystemWrite    CapabilityName = "filesystem_write"
 	CapShellExec          CapabilityName = "shell_exec"
 	CapOutboundNetwork    CapabilityName = "outbound_network"
+	CapDataEgress         CapabilityName = "data_egress"
 	CapGitWrite           CapabilityName = "git_write"
 	CapUntrustedContext   CapabilityName = "untrusted_context"
 	CapCredentialMaterial CapabilityName = "credential_material"
@@ -54,6 +55,7 @@ var AllCapabilities = []CapabilityName{
 	CapFilesystemWrite,
 	CapShellExec,
 	CapOutboundNetwork,
+	CapDataEgress,
 	CapGitWrite,
 	CapUntrustedContext,
 	CapCredentialMaterial,

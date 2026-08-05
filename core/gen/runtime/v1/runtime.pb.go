@@ -917,8 +917,10 @@ type Capabilities struct {
 	GitWrite           *Capability            `protobuf:"bytes,6,opt,name=git_write,json=gitWrite,proto3" json:"git_write,omitempty"`
 	UntrustedContext   *Capability            `protobuf:"bytes,7,opt,name=untrusted_context,json=untrustedContext,proto3" json:"untrusted_context,omitempty"`
 	CredentialMaterial *Capability            `protobuf:"bytes,8,opt,name=credential_material,json=credentialMaterial,proto3" json:"credential_material,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Data actually left the machine, as distinct from merely reaching a host.
+	DataEgress    *Capability `protobuf:"bytes,9,opt,name=data_egress,json=dataEgress,proto3" json:"data_egress,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Capabilities) Reset() {
@@ -1003,6 +1005,13 @@ func (x *Capabilities) GetUntrustedContext() *Capability {
 func (x *Capabilities) GetCredentialMaterial() *Capability {
 	if x != nil {
 		return x.CredentialMaterial
+	}
+	return nil
+}
+
+func (x *Capabilities) GetDataEgress() *Capability {
+	if x != nil {
+		return x.DataEgress
 	}
 	return nil
 }
@@ -2042,7 +2051,7 @@ const file_runtime_v1_runtime_proto_rawDesc = "" +
 	"\n" +
 	"first_seen\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tfirstSeen\x12\x14\n" +
 	"\x05count\x18\x03 \x01(\rR\x05count\x12\x1a\n" +
-	"\bevidence\x18\x04 \x03(\tR\bevidence\"\x8c\x04\n" +
+	"\bevidence\x18\x04 \x03(\tR\bevidence\"\xc5\x04\n" +
 	"\fCapabilities\x12;\n" +
 	"\rsecret_access\x18\x01 \x01(\v2\x16.runtime.v1.CapabilityR\fsecretAccess\x12?\n" +
 	"\x0ffilesystem_read\x18\x02 \x01(\v2\x16.runtime.v1.CapabilityR\x0efilesystemRead\x12A\n" +
@@ -2052,7 +2061,9 @@ const file_runtime_v1_runtime_proto_rawDesc = "" +
 	"\x10outbound_network\x18\x05 \x01(\v2\x16.runtime.v1.CapabilityR\x0foutboundNetwork\x123\n" +
 	"\tgit_write\x18\x06 \x01(\v2\x16.runtime.v1.CapabilityR\bgitWrite\x12C\n" +
 	"\x11untrusted_context\x18\a \x01(\v2\x16.runtime.v1.CapabilityR\x10untrustedContext\x12G\n" +
-	"\x13credential_material\x18\b \x01(\v2\x16.runtime.v1.CapabilityR\x12credentialMaterial\"\xe2\x02\n" +
+	"\x13credential_material\x18\b \x01(\v2\x16.runtime.v1.CapabilityR\x12credentialMaterial\x127\n" +
+	"\vdata_egress\x18\t \x01(\v2\x16.runtime.v1.CapabilityR\n" +
+	"dataEgress\"\xe2\x02\n" +
 	"\aSession\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05agent\x18\x02 \x01(\tR\x05agent\x129\n" +
@@ -2275,46 +2286,47 @@ var file_runtime_v1_runtime_proto_depIdxs = []int32{
 	13, // 15: runtime.v1.Capabilities.git_write:type_name -> runtime.v1.Capability
 	13, // 16: runtime.v1.Capabilities.untrusted_context:type_name -> runtime.v1.Capability
 	13, // 17: runtime.v1.Capabilities.credential_material:type_name -> runtime.v1.Capability
-	29, // 18: runtime.v1.Session.started_at:type_name -> google.protobuf.Timestamp
-	29, // 19: runtime.v1.Session.last_signal_at:type_name -> google.protobuf.Timestamp
-	4,  // 20: runtime.v1.Session.state:type_name -> runtime.v1.SafetyState
-	14, // 21: runtime.v1.Session.capabilities:type_name -> runtime.v1.Capabilities
-	19, // 22: runtime.v1.Session.risk:type_name -> runtime.v1.Risk
-	15, // 23: runtime.v1.SessionUpdate.session:type_name -> runtime.v1.Session
-	24, // 24: runtime.v1.SessionUpdate.latest_decision:type_name -> runtime.v1.Decision
-	18, // 25: runtime.v1.Risk.factors:type_name -> runtime.v1.Factor
-	29, // 26: runtime.v1.Risk.computed_at:type_name -> google.protobuf.Timestamp
-	4,  // 27: runtime.v1.RiskSummary.band:type_name -> runtime.v1.SafetyState
-	18, // 28: runtime.v1.RiskSummary.top_factors:type_name -> runtime.v1.Factor
-	20, // 29: runtime.v1.Explanation.risk:type_name -> runtime.v1.RiskSummary
-	5,  // 30: runtime.v1.Option.effect:type_name -> runtime.v1.Action
-	6,  // 31: runtime.v1.Interaction.channel_hint:type_name -> runtime.v1.ChannelHint
-	5,  // 32: runtime.v1.Interaction.headless_default:type_name -> runtime.v1.Action
-	22, // 33: runtime.v1.Interaction.options:type_name -> runtime.v1.Option
-	5,  // 34: runtime.v1.Decision.action:type_name -> runtime.v1.Action
-	19, // 35: runtime.v1.Decision.risk:type_name -> runtime.v1.Risk
-	21, // 36: runtime.v1.Decision.explanation:type_name -> runtime.v1.Explanation
-	23, // 37: runtime.v1.Decision.interaction:type_name -> runtime.v1.Interaction
-	29, // 38: runtime.v1.Decision.decided_at:type_name -> google.protobuf.Timestamp
-	7,  // 39: runtime.v1.ResolveRequest.source:type_name -> runtime.v1.ResolutionSource
-	5,  // 40: runtime.v1.ResolveAck.applied:type_name -> runtime.v1.Action
-	11, // 41: runtime.v1.Runtime.Decide:input_type -> runtime.v1.DecideRequest
-	10, // 42: runtime.v1.Runtime.Observe:input_type -> runtime.v1.Signal
-	25, // 43: runtime.v1.Runtime.Resolve:input_type -> runtime.v1.ResolveRequest
-	16, // 44: runtime.v1.Runtime.GetSession:input_type -> runtime.v1.SessionRequest
-	16, // 45: runtime.v1.Runtime.WatchSession:input_type -> runtime.v1.SessionRequest
-	27, // 46: runtime.v1.Runtime.Health:input_type -> runtime.v1.HealthRequest
-	24, // 47: runtime.v1.Runtime.Decide:output_type -> runtime.v1.Decision
-	12, // 48: runtime.v1.Runtime.Observe:output_type -> runtime.v1.ObserveAck
-	26, // 49: runtime.v1.Runtime.Resolve:output_type -> runtime.v1.ResolveAck
-	15, // 50: runtime.v1.Runtime.GetSession:output_type -> runtime.v1.Session
-	17, // 51: runtime.v1.Runtime.WatchSession:output_type -> runtime.v1.SessionUpdate
-	28, // 52: runtime.v1.Runtime.Health:output_type -> runtime.v1.HealthResponse
-	47, // [47:53] is the sub-list for method output_type
-	41, // [41:47] is the sub-list for method input_type
-	41, // [41:41] is the sub-list for extension type_name
-	41, // [41:41] is the sub-list for extension extendee
-	0,  // [0:41] is the sub-list for field type_name
+	13, // 18: runtime.v1.Capabilities.data_egress:type_name -> runtime.v1.Capability
+	29, // 19: runtime.v1.Session.started_at:type_name -> google.protobuf.Timestamp
+	29, // 20: runtime.v1.Session.last_signal_at:type_name -> google.protobuf.Timestamp
+	4,  // 21: runtime.v1.Session.state:type_name -> runtime.v1.SafetyState
+	14, // 22: runtime.v1.Session.capabilities:type_name -> runtime.v1.Capabilities
+	19, // 23: runtime.v1.Session.risk:type_name -> runtime.v1.Risk
+	15, // 24: runtime.v1.SessionUpdate.session:type_name -> runtime.v1.Session
+	24, // 25: runtime.v1.SessionUpdate.latest_decision:type_name -> runtime.v1.Decision
+	18, // 26: runtime.v1.Risk.factors:type_name -> runtime.v1.Factor
+	29, // 27: runtime.v1.Risk.computed_at:type_name -> google.protobuf.Timestamp
+	4,  // 28: runtime.v1.RiskSummary.band:type_name -> runtime.v1.SafetyState
+	18, // 29: runtime.v1.RiskSummary.top_factors:type_name -> runtime.v1.Factor
+	20, // 30: runtime.v1.Explanation.risk:type_name -> runtime.v1.RiskSummary
+	5,  // 31: runtime.v1.Option.effect:type_name -> runtime.v1.Action
+	6,  // 32: runtime.v1.Interaction.channel_hint:type_name -> runtime.v1.ChannelHint
+	5,  // 33: runtime.v1.Interaction.headless_default:type_name -> runtime.v1.Action
+	22, // 34: runtime.v1.Interaction.options:type_name -> runtime.v1.Option
+	5,  // 35: runtime.v1.Decision.action:type_name -> runtime.v1.Action
+	19, // 36: runtime.v1.Decision.risk:type_name -> runtime.v1.Risk
+	21, // 37: runtime.v1.Decision.explanation:type_name -> runtime.v1.Explanation
+	23, // 38: runtime.v1.Decision.interaction:type_name -> runtime.v1.Interaction
+	29, // 39: runtime.v1.Decision.decided_at:type_name -> google.protobuf.Timestamp
+	7,  // 40: runtime.v1.ResolveRequest.source:type_name -> runtime.v1.ResolutionSource
+	5,  // 41: runtime.v1.ResolveAck.applied:type_name -> runtime.v1.Action
+	11, // 42: runtime.v1.Runtime.Decide:input_type -> runtime.v1.DecideRequest
+	10, // 43: runtime.v1.Runtime.Observe:input_type -> runtime.v1.Signal
+	25, // 44: runtime.v1.Runtime.Resolve:input_type -> runtime.v1.ResolveRequest
+	16, // 45: runtime.v1.Runtime.GetSession:input_type -> runtime.v1.SessionRequest
+	16, // 46: runtime.v1.Runtime.WatchSession:input_type -> runtime.v1.SessionRequest
+	27, // 47: runtime.v1.Runtime.Health:input_type -> runtime.v1.HealthRequest
+	24, // 48: runtime.v1.Runtime.Decide:output_type -> runtime.v1.Decision
+	12, // 49: runtime.v1.Runtime.Observe:output_type -> runtime.v1.ObserveAck
+	26, // 50: runtime.v1.Runtime.Resolve:output_type -> runtime.v1.ResolveAck
+	15, // 51: runtime.v1.Runtime.GetSession:output_type -> runtime.v1.Session
+	17, // 52: runtime.v1.Runtime.WatchSession:output_type -> runtime.v1.SessionUpdate
+	28, // 53: runtime.v1.Runtime.Health:output_type -> runtime.v1.HealthResponse
+	48, // [48:54] is the sub-list for method output_type
+	42, // [42:48] is the sub-list for method input_type
+	42, // [42:42] is the sub-list for extension type_name
+	42, // [42:42] is the sub-list for extension extendee
+	0,  // [0:42] is the sub-list for field type_name
 }
 
 func init() { file_runtime_v1_runtime_proto_init() }

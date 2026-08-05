@@ -35,8 +35,12 @@
       "description": "executed shell commands"
     },
     "outbound_network": {
-      "points": 15,
+      "points": 10,
       "description": "reached an external network"
+    },
+    "data_egress": {
+      "points": 22,
+      "description": "sent data off the machine"
     },
     "git_write": {
       "points": 12,
@@ -50,16 +54,30 @@
 
   "combinations": [
     {
+      "_comment": "Having secrets and network access is the SHAPE of exfiltration. It is not exfiltration -- an agent that reads a config file and then installs a dependency looks exactly like this. Scored as a concern, not an alarm.",
       "name": "secret_exfiltration_path",
       "requires": ["secret_access", "outbound_network"],
-      "points": 30,
+      "points": 15,
       "description": "both secrets and a way to send them out"
+    },
+    {
+      "_comment": "Data actually left the machine after secrets were read. This is the alarm the previous entry only hints at.",
+      "name": "secret_egress",
+      "requires": ["secret_access", "data_egress"],
+      "points": 42,
+      "description": "read secrets and then sent data off the machine"
     },
     {
       "name": "credential_exfiltration_path",
       "requires": ["credential_material", "outbound_network"],
-      "points": 38,
+      "points": 20,
       "description": "reusable key material and an external destination"
+    },
+    {
+      "name": "credential_egress",
+      "requires": ["credential_material", "data_egress"],
+      "points": 48,
+      "description": "sent data off the machine after reading key material"
     },
     {
       "name": "scripted_exfiltration",
@@ -87,9 +105,15 @@
     },
     {
       "name": "broad_read_then_send",
-      "requires": ["filesystem_read", "outbound_network"],
-      "points": 10,
-      "description": "read outside the workspace and a way to reach the network"
+      "requires": ["filesystem_read", "data_egress"],
+      "points": 16,
+      "description": "read outside the workspace and then sent data out"
+    },
+    {
+      "name": "injected_egress",
+      "requires": ["untrusted_context", "data_egress"],
+      "points": 26,
+      "description": "ingested outside content before sending data out"
     }
   ],
 
