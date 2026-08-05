@@ -68,7 +68,33 @@ un-refuse it.
 Needs a pending queue in the daemon, `Resolve` reachable from the CLI, and the
 two commands.
 
-### 2.2 `guard learned` cannot list anything
+### 2.2 Nothing starts the daemon
+
+`install.sh` prints "Start the daemon: guard up" and does not do it. There is no
+launchd or systemd unit in the repo, and `guard up` runs in the foreground — it
+dies when the terminal closes.
+
+So protection is off after every reboot until the developer remembers to turn it
+on. The constitution says "Cloud is optional. Protection is mandatory"; right
+now protection is the more optional of the two.
+
+Worth separating two decisions that look alike:
+
+- **The daemon should probably start on its own.** It changes no session's
+  behaviour until a hook is registered — it just listens on a socket in its own
+  state directory. It opens no files (adapters send path *strings*; the daemon
+  never reads them), so on macOS a user LaunchAgent needs no TCC prompt and no
+  Full Disk Access.
+- **The hook should stay explicit.** Registering it changes what happens in
+  every session of a project. A security tool that installs itself into your
+  workflow unasked has picked a strange place to start earning trust.
+
+Wanted: a LaunchAgent plist and a systemd user unit, installed only when the
+developer opts in (`install.sh --autostart`, or a documented `guard service
+install`). Plus a `guard down`, since there is currently no way to stop it other
+than `pkill`.
+
+### 2.3 `guard learned` cannot list anything
 
 It prints a count. `guard revoke <id>` needs an id the developer has no way to
 obtain. Article XI requires learned rules to be *listable* and revocable.
