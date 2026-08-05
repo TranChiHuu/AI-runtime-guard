@@ -1,0 +1,144 @@
+{
+  "version": "2026.01-a",
+
+  "_comment": [
+    "The first honest guess. These numbers are data, not code, so tuning them",
+    "is a reviewable diff validated by replaying recorded sessions -- never a",
+    "Go release. See docs/ARCHITECTURE.md §6.",
+    "",
+    "Design intent: individual capabilities score LOW. Their co-occurrence",
+    "scores HIGH. A session that read a secret is unremarkable; a session that",
+    "read a secret AND can reach the internet is the actual threat. If you find",
+    "yourself raising a base weight to catch a case, the combination is what's",
+    "missing."
+  ],
+
+  "capabilities": {
+    "secret_access": {
+      "points": 18,
+      "description": "read something secret-shaped"
+    },
+    "credential_material": {
+      "points": 24,
+      "description": "read reusable key material"
+    },
+    "filesystem_read": {
+      "points": 8,
+      "description": "read outside the workspace"
+    },
+    "filesystem_write": {
+      "points": 6,
+      "description": "written to disk"
+    },
+    "shell_exec": {
+      "points": 10,
+      "description": "executed shell commands"
+    },
+    "outbound_network": {
+      "points": 15,
+      "description": "reached an external network"
+    },
+    "git_write": {
+      "points": 12,
+      "description": "mutated git history or a remote"
+    },
+    "untrusted_context": {
+      "points": 14,
+      "description": "ingested content from outside the workspace"
+    }
+  },
+
+  "combinations": [
+    {
+      "name": "secret_exfiltration_path",
+      "requires": ["secret_access", "outbound_network"],
+      "points": 30,
+      "description": "both secrets and a way to send them out"
+    },
+    {
+      "name": "credential_exfiltration_path",
+      "requires": ["credential_material", "outbound_network"],
+      "points": 38,
+      "description": "reusable key material and an external destination"
+    },
+    {
+      "name": "scripted_exfiltration",
+      "requires": ["secret_access", "shell_exec", "outbound_network"],
+      "points": 12,
+      "description": "shell access that makes an automated send trivial"
+    },
+    {
+      "name": "injected_secret_access",
+      "requires": ["untrusted_context", "secret_access"],
+      "points": 22,
+      "description": "ingested outside content before reading secrets"
+    },
+    {
+      "name": "injected_execution",
+      "requires": ["untrusted_context", "shell_exec"],
+      "points": 20,
+      "description": "ingested outside content before executing shell commands"
+    },
+    {
+      "name": "injected_publication",
+      "requires": ["untrusted_context", "git_write"],
+      "points": 18,
+      "description": "ingested outside content before mutating git"
+    },
+    {
+      "name": "broad_read_then_send",
+      "requires": ["filesystem_read", "outbound_network"],
+      "points": 10,
+      "description": "read outside the workspace and a way to reach the network"
+    }
+  ],
+
+  "mitigations": {
+    "allowlisted_destination": {
+      "points": -40,
+      "description": "the destination is on this workspace's allowlist"
+    },
+    "reversible_action": {
+      "points": -8,
+      "description": "this action can be undone locally"
+    },
+    "trusted_workspace": {
+      "points": -6,
+      "description": "the workspace is marked trusted"
+    }
+  },
+
+  "confidence": {
+    "_comment": "How sure we are, deliberately separate from how bad. High score with low confidence must never block.",
+    "base": 0.9,
+    "penalty_signals_lost": 0.25,
+    "penalty_unknown_scope": 0.3,
+    "penalty_unknown_destination": 0.1,
+    "floor": 0.1
+  },
+
+  "thresholds": {
+    "_comment": "Score cutoffs for the intervention ladder. Climbed, not jumped.",
+    "notify": 20,
+    "ask": 50,
+    "escalate": 80,
+
+    "_comment_confidence": "Confidence gates: below these, the ladder is capped. High score + low confidence NOTIFYs, it does not block.",
+    "min_confidence_ask": 0.5,
+    "min_confidence_escalate": 0.75
+  },
+
+  "irreversible": {
+    "_comment": "Only irreversible actions may reach PAUSE or BLOCK. A file write in a clean git tree is reversible and must not be blocked.",
+    "kinds": ["NETWORK"],
+    "git_ops": ["push", "force-push", "reset-hard", "remote-add", "remote-set"],
+    "file_ops": ["delete"]
+  },
+
+  "interaction": {
+    "timeout_ms": 120000,
+    "_comment_headless": "What to do when no human is reachable. A judgment about what is safe when nobody is watching, so it lives here and not in the adapter.",
+    "headless_default_ask": "ALLOW",
+    "headless_default_escalate": "BLOCK"
+  }
+}

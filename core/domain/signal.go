@@ -40,6 +40,42 @@ const (
 	KindSessionEnd
 )
 
+// kindNames is the wire/config spelling of each kind. Config files name kinds
+// as strings, so this mapping is part of the contract, not a debug convenience.
+var kindNames = map[Kind]string{
+	KindPrompt:        "PROMPT",
+	KindToolCall:      "TOOL_CALL",
+	KindToolResult:    "TOOL_RESULT",
+	KindFileRead:      "FILE_READ",
+	KindFileWrite:     "FILE_WRITE",
+	KindShellExec:     "SHELL_EXEC",
+	KindNetwork:       "NETWORK",
+	KindGit:           "GIT",
+	KindMCP:           "MCP",
+	KindContextIngest: "CONTEXT_INGEST",
+	KindSessionStart:  "SESSION_START",
+	KindSessionEnd:    "SESSION_END",
+}
+
+func (k Kind) String() string {
+	if n, ok := kindNames[k]; ok {
+		return n
+	}
+	return "UNSPECIFIED"
+}
+
+// ParseKind resolves a config or wire spelling. The bool is explicit because a
+// typo in a config file must fail loudly at load rather than silently disabling
+// a detection.
+func ParseKind(s string) (Kind, bool) {
+	for k, n := range kindNames {
+		if n == s {
+			return k, true
+		}
+	}
+	return KindUnspecified, false
+}
+
 type ActorType uint8
 
 const (
