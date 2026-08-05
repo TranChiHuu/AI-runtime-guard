@@ -27,13 +27,9 @@ func cmdStatus() error {
 		return err
 	}
 
-	fmt.Printf("%s %s %s %s %s %s\n",
-		padVisible("SESSION", 38), padVisible("AGENT", 12),
-		padVisible("STATE", 12), padVisible("RISK", 7),
-		padVisible("SIGNALS", 7), "CAPABILITIES")
-
 	// WatchSession replays current state before streaming, so one pass over the
-	// initial burst is the whole picture.
+	// initial burst is the whole picture. The header waits for the first row:
+	// column titles over an empty table are furniture, not information.
 	n := 0
 	for {
 		update, err := stream.Recv()
@@ -41,6 +37,12 @@ func cmdStatus() error {
 			break
 		}
 		s := update.GetSession()
+		if n == 0 {
+			fmt.Printf("%s %s %s %s %s %s\n",
+				padVisible("SESSION", 38), padVisible("AGENT", 12),
+				padVisible("STATE", 12), padVisible("RISK", 7),
+				padVisible("SIGNALS", 7), "CAPABILITIES")
+		}
 		fmt.Printf("%s %s %s %s %s %s\n",
 			padVisible(s.GetId(), 38), padVisible(s.GetAgent(), 12),
 			padVisible(stateColour(domain.SafetyState(s.GetState())), 12),
