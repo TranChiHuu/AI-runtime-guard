@@ -12,3 +12,8 @@ adapters/*/src/gen/
 *.db-wal
 *.db-shm
 .guard/
+
+# The built binary at the repo root. Anchored with a leading slash: a bare
+# `guard` also matches core/cmd/guard/, which silently swallowed a new source
+# file until a clean clone failed to build.
+/guard

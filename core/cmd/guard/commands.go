@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/airuntimeguard/core/config"
 	"github.com/airuntimeguard/core/domain"
@@ -28,8 +27,10 @@ func cmdStatus() error {
 		return err
 	}
 
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "SESSION\tAGENT\tSTATE\tRISK\tSIGNALS\tCAPABILITIES")
+	fmt.Printf("%s %s %s %s %s %s\n",
+		padVisible("SESSION", 38), padVisible("AGENT", 12),
+		padVisible("STATE", 12), padVisible("RISK", 7),
+		padVisible("SIGNALS", 7), "CAPABILITIES")
 
 	// WatchSession replays current state before streaming, so one pass over the
 	// initial burst is the whole picture.
@@ -40,15 +41,17 @@ func cmdStatus() error {
 			break
 		}
 		s := update.GetSession()
-		fmt.Fprintf(w, "%s\t%s\t%s\t%d/100\t%d\t%s\n",
-			s.GetId(), s.GetAgent(), stateName(s.GetState()),
-			s.GetRisk().GetScore(), s.GetSignalCount(), capsOf(s.GetCapabilities()))
+		fmt.Printf("%s %s %s %s %s %s\n",
+			padVisible(s.GetId(), 38), padVisible(s.GetAgent(), 12),
+			padVisible(stateColour(domain.SafetyState(s.GetState())), 12),
+			padVisible(riskScore(int(s.GetRisk().GetScore())), 7),
+			padVisible(fmt.Sprint(s.GetSignalCount()), 7),
+			capsOf(s.GetCapabilities()))
 		n++
 		if n >= 200 {
 			break
 		}
 	}
-	w.Flush()
 
 	if n == 0 {
 		fmt.Println("no live sessions")
@@ -138,9 +141,11 @@ func cmdReport(sessionID string) error {
 
 		label := r.Action.String()
 		if r.Suppressed {
-			label = r.Action.String() + ", auto-answered"
+			label += ", auto-answered"
 		}
-		fmt.Printf("%s  [%s]  %s\n", r.DecidedAt.Format("15:04:05"), label, r.SessionID)
+		fmt.Printf("%s  %s  [%s]  %s\n",
+			r.DecidedAt.Format("15:04:05"), riskScore(r.Score),
+			actionColour(r.Action, label), r.SessionID)
 		fmt.Printf("    what: %s\n", r.Explanation.What)
 		fmt.Printf("     why: %s\n", r.Explanation.Why)
 		if len(r.Explanation.Evidence) > 0 {
@@ -230,10 +235,6 @@ func dirWritable(dir string) error {
 		return err
 	}
 	return os.Remove(probe)
-}
-
-func stateName(s pb.SafetyState) string {
-	return domain.SafetyState(s).String()
 }
 
 func sourceName(s domain.ResolutionSource) string {

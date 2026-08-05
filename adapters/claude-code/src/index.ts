@@ -28,6 +28,7 @@ import {
 
 import { toSignal, type HookEvent } from './map.js';
 import { ttyChannel } from './channels.js';
+import { line, block } from './render.js';
 
 /**
  * Claude Code's hook response. `deny` blocks the call with a reason the agent
@@ -154,14 +155,16 @@ function translate(action: Action, decision: Decision, hookEventName: string): H
       return {};
 
     case Action.Notify:
-      return { systemMessage: `AI Runtime Guard: ${e.summary}` };
+      // `what` rather than `summary`: the Brain's summary carries the score
+      // inline for channels that cannot render one, and this channel can.
+      return { systemMessage: line(e.risk, e.what) };
 
     case Action.Ask:
       return {
         hookSpecificOutput: {
           hookEventName,
           permissionDecision: 'ask',
-          permissionDecisionReason: `${e.why}\n\n${e.guidance}`,
+          permissionDecisionReason: block(e.risk, e.why, e.guidance),
         },
       };
 
@@ -171,7 +174,7 @@ function translate(action: Action, decision: Decision, hookEventName: string): H
         hookSpecificOutput: {
           hookEventName,
           permissionDecision: 'deny',
-          permissionDecisionReason: `${e.why}\n\n${e.guidance}`,
+          permissionDecisionReason: block(e.risk, e.why, e.guidance),
         },
       };
 

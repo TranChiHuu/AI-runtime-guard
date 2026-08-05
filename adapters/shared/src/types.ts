@@ -170,12 +170,36 @@ export interface Interaction {
   options: Option[];
 }
 
+/** The safety band a score falls in. Mirrors SafetyState on the wire. */
+export enum Band {
+  Unspecified = 0,
+  Safe = 1,
+  Watching = 2,
+  Warning = 3,
+  Critical = 4,
+  Intervention = 5,
+}
+
+export interface Factor {
+  name: string;
+  contribution: number;
+  description: string;
+}
+
+export interface RiskSummary {
+  score: number;
+  band: Band;
+  topFactors: Factor[];
+}
+
 export interface Explanation {
   /** One line, for prompt channels with tight text budgets. */
   summary: string;
   what: string;
   why: string;
   evidence: string[];
+  /** Score, band, and the largest contributors — enough to render a verdict. */
+  risk?: RiskSummary;
   guidance: string;
 }
 
