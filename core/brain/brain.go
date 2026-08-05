@@ -8,6 +8,7 @@
 package brain
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -25,6 +26,16 @@ import (
 // this line calls time.Now().
 type Clock func() time.Time
 
+// Sink is durable storage. Declared here as an interface so the Brain depends
+// on no storage implementation, and so a replay can run with no sink at all.
+type Sink interface {
+	PutSignal(domain.Signal) error
+	PutDecision(domain.Decision) error
+	PutSession(*domain.Session) error
+	PutResolution(domain.Resolution) error
+	PutPreference(audit.Preference) error
+}
+
 type Options struct {
 	Config    *config.Config
 	Workspace ctxengine.Workspace
@@ -33,6 +44,8 @@ type Options struct {
 	// NewID must be deterministic under replay. The default is a monotonic
 	// counter for exactly that reason: a UUID would make every replay differ.
 	NewID func() string
+	// Sink is optional. When set, writes happen off the decision path.
+	Sink Sink
 }
 
 type Brain struct {
@@ -58,6 +71,12 @@ type Brain struct {
 	// lastSignal remembers the signal behind each prompt, so a learned
 	// preference can be bound to the shape that was actually approved.
 	lastSignal map[string]domain.Signal
+
+	// writes carries durable work off the decision path. Disk latency must
+	// never sit inside the 50 ms budget (docs/RUNTIME_MODEL.md §10).
+	writes chan func(Sink)
+	sink   Sink
+	done   chan struct{}
 }
 
 func New(o Options) *Brain {
@@ -73,7 +92,7 @@ func New(o Options) *Brain {
 
 	auditEngine := audit.New(o.NewID)
 
-	return &Brain{
+	b := &Brain{
 		cfg:        o.Config,
 		sessions:   session.New(session.NewMemStore()),
 		context:    ctxengine.New(o.Workspace),
@@ -83,7 +102,48 @@ func New(o Options) *Brain {
 		audit:      auditEngine,
 		clock:      o.Clock,
 		lastSignal: map[string]domain.Signal{},
+		sink:       o.Sink,
+		done:       make(chan struct{}),
 	}
+
+	if o.Sink != nil {
+		// Buffered so a slow disk cannot back-pressure into the decision path.
+		// If the buffer fills we drop the write and keep deciding: losing an
+		// audit row is bad, stalling an agent behind fsync is worse.
+		b.writes = make(chan func(Sink), 1024)
+		go b.drain()
+	}
+
+	return b
+}
+
+func (b *Brain) drain() {
+	defer close(b.done)
+	for w := range b.writes {
+		w(b.sink)
+	}
+}
+
+// persist queues durable work. Non-blocking by design.
+func (b *Brain) persist(w func(Sink)) {
+	if b.writes == nil {
+		return
+	}
+	select {
+	case b.writes <- w:
+	default:
+	}
+}
+
+// Close flushes pending writes. Called on daemon shutdown; the demo and tests
+// use it to make assertions about what actually landed on disk.
+func (b *Brain) Close() {
+	if b.writes == nil {
+		return
+	}
+	close(b.writes)
+	<-b.done
+	b.writes = nil
 }
 
 // Decide runs the full loop for a PRE-phase signal and returns a verdict.
@@ -140,6 +200,12 @@ func (b *Brain) Decide(sig domain.Signal) (domain.Decision, error) {
 		b.lastSignal[d.Interaction.PromptID] = sig
 	}
 
+	b.persist(func(s Sink) {
+		_ = s.PutSignal(sig)
+		_ = s.PutDecision(d)
+		_ = s.PutSession(sess)
+	})
+
 	return d, nil
 }
 
@@ -156,15 +222,34 @@ func (b *Brain) Observe(sig domain.Signal) error {
 	ctx := b.context.Derive(sess, sig)
 	sess.Risk = b.risk.Score(sess, ctx, sig, b.clock())
 	sess.Escalate(sess.Risk.Band())
+
+	b.persist(func(st Sink) {
+		_ = st.PutSignal(sig)
+		_ = st.PutSession(sess)
+	})
 	return nil
 }
 
-// Resolve applies a human's answer — or the reason there wasn't one.
-func (b *Brain) Resolve(sessionID string, res domain.Resolution) (domain.Action, error) {
+// ErrUnknownPrompt means the prompt was never issued, or was already resolved.
+// Resolving twice is not an error worth crashing over, but it must not silently
+// look like a fresh answer either.
+var ErrUnknownPrompt = errors.New("brain: unknown or already-resolved prompt")
+
+// ResolvePrompt applies a human's answer — or the reason there wasn't one.
+//
+// It takes only the prompt id because that is all an adapter reliably has: the
+// hook process that renders a prompt may not be the one that received the
+// decision. The Brain owns the mapping back to the session.
+func (b *Brain) ResolvePrompt(res domain.Resolution) (domain.Action, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	sess, ok := b.sessions.Get(sessionID)
+	sig, ok := b.lastSignal[res.PromptID]
+	if !ok {
+		return domain.ActionUnspecified, ErrUnknownPrompt
+	}
+
+	sess, ok := b.sessions.Get(sig.SessionID)
 	if !ok {
 		return domain.ActionUnspecified, session.ErrNoSessionID
 	}
@@ -174,15 +259,19 @@ func (b *Brain) Resolve(sessionID string, res domain.Resolution) (domain.Action,
 	if pref != nil {
 		// Bind the preference to the shape that was actually approved, so it
 		// can never widen beyond it.
-		if sig, ok := b.lastSignal[res.PromptID]; ok {
-			dest := ""
-			if sig.Target.Type == domain.TargetHost {
-				dest = sig.Target.Value
-			}
-			b.audit.Bind(pref.ID, sig, dest)
+		dest := ""
+		if sig.Target.Type == domain.TargetHost {
+			dest = sig.Target.Value
 		}
+		b.audit.Bind(pref.ID, sig, dest)
+
+		saved := *pref
+		saved.Kind, saved.Scope, saved.Destination = sig.Kind, sig.Target.Scope, dest
+		b.persist(func(st Sink) { _ = st.PutPreference(saved) })
 	}
 	delete(b.lastSignal, res.PromptID)
+
+	b.persist(func(st Sink) { _ = st.PutResolution(res) })
 
 	// The intervention is over; the session falls back to what its risk says.
 	if sess.State == domain.StateIntervention {

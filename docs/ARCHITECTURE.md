@@ -273,18 +273,27 @@ core/                   Go module: the Runtime Brain
     session/ context/ risk/ policy/ decision/ audit/
   store/                SQLite implementation of store interfaces
   config/               weights, thresholds, loading, versioning
-  server/               gRPC service, wiring, daemon
-cli/                    Go: guard
+  server/               gRPC service, wire<->domain conversion
+  store/sqlite/         durable local storage
+  brain/                wires the engines into the loop
+  cmd/guard/            the guard CLI and daemon
+  cmd/demo/             the Brain's reasoning without a daemon
 adapters/               TypeScript workspace
   shared/               transport, retry, fail-open, generated client
   claude-code/ codex/ gemini/ cursor/ mcp/
 dashboard/              TypeScript: local UI
 docs/
-testdata/sessions/      recorded sessions for replay-based validation
+scripts/e2e.sh          end-to-end check: daemon, gRPC, storage, replay
+Dockerfile              reproducible build and test
+docker-compose.yml      docker compose run --rm test | e2e | demo
 ```
 
 `core/domain` importing nothing but the standard library is the structural
 statement of Article IV.
+
+The CLI lives in `core/cmd/guard` rather than a top-level module: it is a plain
+gRPC client with no privileged path into the Brain, and a second Go module would
+buy a `replace` directive and nothing else.
 
 ---
 

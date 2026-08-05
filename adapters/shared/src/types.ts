@@ -6,6 +6,81 @@
  * it, never the reverse.
  */
 
+export enum Phase {
+  Unspecified = 0,
+  /** The action has not happened yet, so it can still be intervened on. */
+  Pre = 1,
+  /** Observation only — nothing can be blocked retroactively. */
+  Post = 2,
+}
+
+export enum Kind {
+  Unspecified = 0,
+  Prompt = 1,
+  ToolCall = 2,
+  ToolResult = 3,
+  FileRead = 4,
+  FileWrite = 5,
+  ShellExec = 6,
+  Network = 7,
+  Git = 8,
+  MCP = 9,
+  ContextIngest = 10,
+  SessionStart = 11,
+  SessionEnd = 12,
+}
+
+export enum TargetType {
+  Unspecified = 0,
+  None = 1,
+  Path = 2,
+  Command = 3,
+  Host = 4,
+  Repo = 5,
+  Resource = 6,
+}
+
+/**
+ * Where a target lives. Computed by the adapter from workspace-local knowledge,
+ * because only the adapter knows where the workspace root is. Descriptive,
+ * never a judgment.
+ */
+export enum Scope {
+  Unknown = '',
+  Repo = 'repo',
+  Home = 'home',
+  System = 'system',
+  External = 'external',
+}
+
+export interface Target {
+  type: TargetType;
+  value: string;
+  scope: Scope;
+}
+
+export interface Actor {
+  name: string;
+}
+
+/** One normalized observation — the only thing adapters produce. */
+export interface Signal {
+  id: string;
+  sessionId: string;
+  agent: string;
+  seq: number;
+  observedAt: string;
+  phase: Phase;
+  kind: Kind;
+  actor: Actor;
+  target: Target;
+  /**
+   * Kind-specific. Secret values must never appear here; use
+   * `secret_shape` / `secret_count` instead.
+   */
+  attributes: Record<string, unknown>;
+}
+
 /**
  * The intervention ladder. Ordered — the numeric values matter, because
  * comparisons are how floors, ceilings, and gates are expressed.

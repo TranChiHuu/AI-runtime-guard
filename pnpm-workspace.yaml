@@ -1,0 +1,8 @@
+packages:
+  - adapters/*
+
+# protobufjs' postinstall generates its CLI helpers. Declared explicitly because
+# pnpm 10 refuses to run unapproved build scripts, and an unreviewed postinstall
+# is exactly the supply-chain surface this product exists to worry about.
+onlyBuiltDependencies:
+  - protobufjs

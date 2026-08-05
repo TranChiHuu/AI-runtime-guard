@@ -3,7 +3,8 @@ dist/
 *.tsbuildinfo
 
 # Generated from proto/ — the .proto files are the source of truth.
-core/gen/
+# generated stubs are committed: one less setup step for a fresh clone
+# (regenerate with `make proto`)
 adapters/*/src/gen/
 
 # Local runtime state. Never committed: it is the developer's data (Article IX).

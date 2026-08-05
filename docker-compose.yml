@@ -1,0 +1,52 @@
+# Reproducible build and test.
+#
+#   docker compose build              build everything
+#   docker compose run --rm test      Go + TypeScript unit tests
+#   docker compose run --rm e2e       daemon + gRPC + SQLite + replay
+#   docker compose run --rm demo      the Brain's reasoning, no daemon
+#
+# Nothing here needs a network at runtime: the whole point of the product is
+# that protection works offline.
+
+services:
+  # Go core: build, vet, test.
+  core-test:
+    build:
+      context: .
+      target: core-test
+    command: ["go", "test", "./...", "-count=1"]
+
+  # TypeScript adapters: build and test.
+  adapters-test:
+    build:
+      context: .
+      target: adapters-test
+    command: ["pnpm", "-r", "test"]
+
+  # Both unit suites in one shot.
+  test:
+    build:
+      context: .
+      target: core-test
+    command: ["sh", "-c", "go test ./... -count=1 && echo && echo 'Go core: all tests passed'"]
+    depends_on:
+      adapters-test:
+        condition: service_completed_successfully
+
+  # The real daemon over the real socket, then the audit trail and replay.
+  e2e:
+    build:
+      context: .
+      target: e2e
+    # A UDS lives on the filesystem, so the socket and the database stay inside
+    # the container. Nothing is published, which is the point: local-first means
+    # there is no port to expose.
+    tmpfs:
+      - /app/state
+
+  # The Brain's reasoning without any daemon, for reading rather than asserting.
+  demo:
+    build:
+      context: .
+      target: core
+    command: ["go", "run", "./cmd/demo"]
