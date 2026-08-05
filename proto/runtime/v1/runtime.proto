@@ -1,0 +1,296 @@
+syntax = "proto3";
+
+package runtime.v1;
+
+option go_package = "github.com/airuntimeguard/core/gen/runtime/v1;runtimev1";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// Runtime is the only boundary between adapters and the Runtime Brain.
+// Everything above it translates; everything below it decides.
+//
+// Transport is gRPC over a Unix domain socket. See docs/ARCHITECTURE.md §3.
+service Runtime {
+  // Decide handles a PRE-phase signal and returns a verdict.
+  //
+  // MUST return within the budget in docs/RUNTIME_MODEL.md §10. It never waits
+  // for a human: when a human is needed the verdict carries an Interaction and
+  // the adapter obtains the answer, then calls Resolve.
+  rpc Decide(DecideRequest) returns (Decision);
+
+  // Observe ingests POST-phase signals. Fire-and-forget; never blocks the agent.
+  rpc Observe(stream Signal) returns (ObserveAck);
+
+  // Resolve reports a human's answer (or a timeout, or a headless default)
+  // back to the Brain. Every Interaction ends here — no prompt is dropped.
+  rpc Resolve(ResolveRequest) returns (ResolveAck);
+
+  rpc GetSession(SessionRequest) returns (Session);
+  rpc WatchSession(SessionRequest) returns (stream SessionUpdate);
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+// ---------------------------------------------------------------------------
+// Signal — the only thing adapters produce. docs/RUNTIME_MODEL.md §2
+// ---------------------------------------------------------------------------
+
+enum Phase {
+  PHASE_UNSPECIFIED = 0;
+  PHASE_PRE = 1;   // action has not happened; can be intervened on
+  PHASE_POST = 2;  // observation only; informs future decisions
+}
+
+enum Kind {
+  KIND_UNSPECIFIED = 0;
+  KIND_PROMPT = 1;
+  KIND_TOOL_CALL = 2;
+  KIND_TOOL_RESULT = 3;
+  KIND_FILE_READ = 4;
+  KIND_FILE_WRITE = 5;
+  KIND_SHELL_EXEC = 6;
+  KIND_NETWORK = 7;
+  KIND_GIT = 8;
+  KIND_MCP = 9;
+  KIND_CONTEXT_INGEST = 10;
+  KIND_SESSION_START = 11;
+  KIND_SESSION_END = 12;
+}
+
+enum ActorType {
+  ACTOR_TYPE_UNSPECIFIED = 0;
+  ACTOR_TYPE_AGENT = 1;
+  ACTOR_TYPE_USER = 2;
+  ACTOR_TYPE_TOOL = 3;
+  ACTOR_TYPE_MCP_SERVER = 4;
+}
+
+enum TargetType {
+  TARGET_TYPE_UNSPECIFIED = 0;
+  TARGET_TYPE_NONE = 1;
+  TARGET_TYPE_PATH = 2;
+  TARGET_TYPE_COMMAND = 3;
+  TARGET_TYPE_HOST = 4;
+  TARGET_TYPE_REPO = 5;
+  TARGET_TYPE_RESOURCE = 6;
+}
+
+message Actor {
+  ActorType type = 1;
+  string name = 2;  // tool or server name; opaque to the Brain
+}
+
+message Target {
+  TargetType type = 1;
+  string value = 2;  // normalized: paths absolute, hosts lowercased
+  // Where this lives, computed by the adapter from workspace-local knowledge.
+  // Descriptive, never a judgment: "repo", "home", "system", "external".
+  string scope = 3;
+}
+
+message Signal {
+  string id = 1;
+  string session_id = 2;
+  string agent = 3;  // opaque label; the Brain must not branch on it
+  uint64 seq = 4;    // monotonic per session; gaps mean lost signals
+  google.protobuf.Timestamp observed_at = 5;
+  Phase phase = 6;
+  Kind kind = 7;
+  Actor actor = 8;
+  Target target = 9;
+  // Kind-specific, declared per kind. Adapters MUST NOT put secret values here;
+  // use secret_shape / secret_count instead. docs/RUNTIME_MODEL.md §2.3
+  google.protobuf.Struct attributes = 10;
+  string raw_ref = 11;  // adapter-local handle for replay; optional
+}
+
+message DecideRequest {
+  Signal signal = 1;
+  string api_version = 2;  // adapter's declared version, e.g. "runtime.v1"
+}
+
+message ObserveAck {
+  uint64 accepted = 1;
+  uint64 dropped = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Session — docs/RUNTIME_MODEL.md §3
+// ---------------------------------------------------------------------------
+
+enum SafetyState {
+  SAFETY_STATE_UNSPECIFIED = 0;
+  SAFETY_STATE_SAFE = 1;
+  SAFETY_STATE_WATCHING = 2;
+  SAFETY_STATE_WARNING = 3;
+  SAFETY_STATE_CRITICAL = 4;
+  SAFETY_STATE_INTERVENTION = 5;
+}
+
+message Capability {
+  bool active = 1;
+  google.protobuf.Timestamp first_seen = 2;
+  uint32 count = 3;
+  repeated string evidence = 4;  // signal ids, capped
+}
+
+// Latched facts about what a session has already done. Once true, true until
+// SESSION_END. This is what makes a later signal dangerous.
+message Capabilities {
+  Capability secret_access = 1;
+  Capability filesystem_read = 2;
+  Capability filesystem_write = 3;
+  Capability shell_exec = 4;
+  Capability outbound_network = 5;
+  Capability git_write = 6;
+  Capability untrusted_context = 7;
+  Capability credential_material = 8;
+}
+
+message Session {
+  string id = 1;
+  string agent = 2;
+  google.protobuf.Timestamp started_at = 3;
+  google.protobuf.Timestamp last_signal_at = 4;
+  SafetyState state = 5;
+  Capabilities capabilities = 6;
+  Risk risk = 7;
+  uint64 signal_count = 8;
+}
+
+message SessionRequest {
+  string session_id = 1;  // empty means all live sessions
+}
+
+message SessionUpdate {
+  Session session = 1;
+  Decision latest_decision = 2;
+}
+
+// ---------------------------------------------------------------------------
+// Risk — additive and itemized, never a rule match. §5
+// ---------------------------------------------------------------------------
+
+message Factor {
+  string name = 1;          // stable identifier, e.g. "secret_access"
+  int32 contribution = 2;   // points added (or subtracted, for mitigations)
+  repeated string evidence = 3;
+  string description = 4;   // human sentence
+}
+
+message Risk {
+  int32 score = 1;       // 0..100
+  float confidence = 2;  // 0..1 — how sure, distinct from how bad
+  repeated Factor factors = 3;
+  google.protobuf.Timestamp computed_at = 4;
+  string config_version = 5;  // which weight set produced this
+}
+
+message RiskSummary {
+  int32 score = 1;
+  SafetyState band = 2;
+  repeated Factor top_factors = 3;
+}
+
+// ---------------------------------------------------------------------------
+// Decision — §7
+// ---------------------------------------------------------------------------
+
+// The intervention ladder. Ordered; climbed, not jumped. Article VII.
+enum Action {
+  ACTION_UNSPECIFIED = 0;
+  ACTION_ALLOW = 1;
+  ACTION_NOTIFY = 2;
+  ACTION_ASK = 3;
+  ACTION_PAUSE = 4;
+  ACTION_BLOCK = 5;
+}
+
+// Mandatory on every decision. A decision that cannot be explained must not be
+// enforced. Article V.
+message Explanation {
+  string summary = 1;   // one line, for prompts with tight text budgets
+  string what = 2;      // the triggering signal
+  string why = 3;       // session state and rules that produced this
+  repeated string evidence = 4;  // prior signal ids that contributed
+  RiskSummary risk = 5;
+  string guidance = 6;  // what the developer should do
+}
+
+message Option {
+  string id = 1;
+  string label = 2;   // "Allow once"
+  Action effect = 3;  // what this choice resolves to
+  bool learns = 4;    // whether choosing it creates a Preference
+}
+
+enum ChannelHint {
+  CHANNEL_HINT_UNSPECIFIED = 0;
+  CHANNEL_HINT_INLINE = 1;       // ASK: block the agent's turn
+  CHANNEL_HINT_OUT_OF_BAND = 2;  // PAUSE: resolve via guard, no deadline
+}
+
+// Present when a human answer is needed. The Brain never waits for one — it
+// hands the adapter everything required to obtain it. §7.3
+message Interaction {
+  string prompt_id = 1;
+  ChannelHint channel_hint = 2;
+  // What to do if no human is reachable. A judgment, so the Brain decides it
+  // and the adapter merely applies it. This is what keeps adapters thin.
+  Action headless_default = 3;
+  uint32 timeout_ms = 4;
+  repeated Option options = 5;
+}
+
+message Decision {
+  string id = 1;
+  string session_id = 2;
+  string signal_id = 3;
+  Action action = 4;
+  Risk risk = 5;
+  repeated string policies = 6;  // applied, in resolution order
+  Explanation explanation = 7;
+  Interaction interaction = 8;   // absent unless a human answer is needed
+  google.protobuf.Timestamp decided_at = 9;
+  uint32 latency_us = 10;
+}
+
+// ---------------------------------------------------------------------------
+// Resolve — how a human's answer gets back. §7.3
+// ---------------------------------------------------------------------------
+
+enum ResolutionSource {
+  RESOLUTION_SOURCE_UNSPECIFIED = 0;
+  RESOLUTION_SOURCE_HUMAN = 1;             // a person answered
+  RESOLUTION_SOURCE_TIMEOUT = 2;           // nobody answered in time
+  RESOLUTION_SOURCE_HEADLESS = 3;          // no human was reachable at all
+  RESOLUTION_SOURCE_ADAPTER_FAILURE = 4;   // the prompt channel broke
+}
+
+message ResolveRequest {
+  string prompt_id = 1;
+  string option_id = 2;  // empty unless source is HUMAN
+  ResolutionSource source = 3;
+  // Which channel was actually used, for diagnostics: "native", "tty", "guard".
+  string channel = 4;
+}
+
+message ResolveAck {
+  Action applied = 1;
+  bool preference_created = 2;
+  string preference_id = 3;
+}
+
+// ---------------------------------------------------------------------------
+// Health
+// ---------------------------------------------------------------------------
+
+message HealthRequest {}
+
+message HealthResponse {
+  bool serving = 1;
+  string version = 2;
+  string config_version = 3;
+  uint32 live_sessions = 4;
+  repeated string supported_api_versions = 5;
+}

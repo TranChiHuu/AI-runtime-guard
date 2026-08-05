@@ -1,0 +1,13 @@
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Generated from proto/ — the .proto files are the source of truth.
+core/gen/
+adapters/*/src/gen/
+
+# Local runtime state. Never committed: it is the developer's data (Article IX).
+*.db
+*.db-wal
+*.db-shm
+.guard/
