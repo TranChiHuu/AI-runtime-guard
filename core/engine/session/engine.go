@@ -118,6 +118,13 @@ func latch(sess *domain.Session, sig domain.Signal) {
 	case domain.KindFileWrite:
 		caps.Latch(domain.CapFilesystemWrite, sig)
 
+		// A write whose contents execute later outlives the session. It is the
+		// difference between doing something now and arranging for something to
+		// happen every time the developer commits or opens a shell.
+		if sig.Attr("write_shape") == "persistence" {
+			caps.Latch(domain.CapPersistence, sig)
+		}
+
 	case domain.KindShellExec:
 		caps.Latch(domain.CapShellExec, sig)
 
@@ -131,6 +138,13 @@ func latch(sess *domain.Session, sig domain.Signal) {
 			// runs a package manager look like an exfiltration attempt.
 			if sig.SendsData() {
 				caps.Latch(domain.CapDataEgress, sig)
+			}
+
+			// A shell wired to a socket is not data leaving, it is control
+			// arriving. Exfiltration loses what the session had; this loses
+			// everything the machine will ever have.
+			if sig.Attr("command_shape") == "remote_shell" {
+				caps.Latch(domain.CapRemoteControl, sig)
 			}
 		}
 

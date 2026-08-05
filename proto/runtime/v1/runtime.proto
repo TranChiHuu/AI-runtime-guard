@@ -147,6 +147,10 @@ message Capabilities {
   Capability credential_material = 8;
   // Data actually left the machine, as distinct from merely reaching a host.
   Capability data_egress = 9;
+  // Wrote somewhere that executes later, outliving the session.
+  Capability persistence = 10;
+  // Wired a shell to a remote socket: control arriving, not data leaving.
+  Capability remote_control = 11;
 }
 
 message Session {

@@ -154,6 +154,8 @@ func fromDomainSession(s *domain.Session) *pb.Session {
 		domain.CapUntrustedContext:   &caps.UntrustedContext,
 		domain.CapCredentialMaterial: &caps.CredentialMaterial,
 		domain.CapDataEgress:         &caps.DataEgress,
+		domain.CapPersistence:        &caps.Persistence,
+		domain.CapRemoteControl:      &caps.RemoteControl,
 	}
 	for name, field := range set {
 		entry, ok := s.Capabilities[name]

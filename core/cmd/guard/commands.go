@@ -267,6 +267,8 @@ func capsOf(c *pb.Capabilities) string {
 		{"shell", c.GetShellExec()},
 		{"network", c.GetOutboundNetwork()},
 		{"egress", c.GetDataEgress()},
+		{"persist", c.GetPersistence()},
+		{"remote-ctl", c.GetRemoteControl()},
 		{"git", c.GetGitWrite()},
 		{"untrusted", c.GetUntrustedContext()},
 		{"credential", c.GetCredentialMaterial()},

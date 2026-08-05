@@ -45,6 +45,8 @@ const (
 	CapGitWrite           CapabilityName = "git_write"
 	CapUntrustedContext   CapabilityName = "untrusted_context"
 	CapCredentialMaterial CapabilityName = "credential_material"
+	CapPersistence        CapabilityName = "persistence"
+	CapRemoteControl      CapabilityName = "remote_control"
 )
 
 // AllCapabilities is the declared set, in a stable order so that explanations
@@ -59,6 +61,8 @@ var AllCapabilities = []CapabilityName{
 	CapGitWrite,
 	CapUntrustedContext,
 	CapCredentialMaterial,
+	CapPersistence,
+	CapRemoteControl,
 }
 
 // maxEvidence caps how many signal ids a capability retains. Evidence exists to

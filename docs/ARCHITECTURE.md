@@ -325,6 +325,23 @@ is validated against recorded reality rather than intuition.
 
 ---
 
+## 10.1 Adversarial Testing
+
+`scripts/redteam.py` pushes real hook payloads through the real adapter into the
+real daemon and reports what the guard missed. It measures the product, not the
+intention: nothing in it inspects the Brain's internals.
+
+Two failure kinds are reported separately, and only one fails the run:
+
+- **GAPS** — the guard did not see it. A hole.
+- **NOISE** — the guard saw it correctly and spoke louder than needed. A
+  threshold judgment.
+
+Conflating them lets a tuning argument masquerade as a security finding, and a
+harness that fails on noise gets tuned until it passes. Add a scenario whenever
+a new evasion is imagined; keep the controls, because a guard that catches
+everything by alarming at everything has not been made safe, only useless.
+
 ## 11. Architectural Fitness Checks
 
 Enforced in CI, because these are the invariants that quietly rot:

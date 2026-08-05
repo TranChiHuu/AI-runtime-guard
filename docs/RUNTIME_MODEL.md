@@ -172,6 +172,8 @@ Capabilities
   git_write            Capability   commit, push, remote mutation
   untrusted_context    Capability   ingested content from outside the workspace
   credential_material  Capability   private keys, tokens, keychain
+  persistence          Capability   wrote somewhere that executes later
+  remote_control       Capability   wired a shell to a remote socket
 
 Capability
   active      bool
@@ -272,7 +274,23 @@ Three deliberate properties:
 
 Weights are data, not code — see `ARCHITECTURE.md` §6.
 
-### 5.2 Mitigations
+### 5.2 Capabilities severe on their own
+
+Almost every capability is mild alone and dangerous in combination — that is the
+whole design. Two are exceptions, and the exception is deliberate:
+
+- `remote_control` (55) — a shell wired to a socket. Exfiltration loses what the
+  session had; this loses everything the machine will ever have. There is no
+  benign reason for an agent to do it.
+- `persistence` (30) — a write to somewhere that executes on its own later. The
+  other capabilities describe what a session did; this describes what it
+  arranged to keep happening after the session is gone, which no later
+  observation can walk back.
+
+If a third entry ever appears here, question it. A model where everything is
+severe alone is a rule engine wearing a score.
+
+### 5.3 Mitigations
 
 Risk goes down as well as up. Signals that reduce it: destination on the
 workspace's declared allowlist, prior explicit approval of this exact shape,
